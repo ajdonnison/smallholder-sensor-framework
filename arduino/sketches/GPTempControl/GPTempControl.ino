@@ -1,3 +1,10 @@
+/*
+ * This is a quick and nasty single-temperature controller.
+ * The values chosen were for a poultry scalder used to
+ * loosen the feathers prior to plucking.
+ * While I could have done it without a micro controller,
+ * I had all the components on the shelf.
+ */
 #include <DallasTemperature.h>
 #include <OneWire.h>
 #include <DelayRun.h>
@@ -69,3 +76,4 @@ void setup() {
   addressValid = false;
   SoftTimer.add(&checkTempTask);
 }
+# vi:ft=cpp sw=2 ai:

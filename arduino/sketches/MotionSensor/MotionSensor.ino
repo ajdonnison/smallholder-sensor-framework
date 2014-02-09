@@ -6,7 +6,9 @@
  minimum so that we just get a pulse that we use to trigger a local
  timer rather than rely on the motion sensor to do that.  This gives
  us the ability to combine with other sensors (like the headlight
- sensor) to provide a unified approach.
+ sensor) to provide a unified approach. It also gets around a problem
+ with the sensors which would not retrigger if movement was detected
+ within the timeout.
 
  This version uses:
 

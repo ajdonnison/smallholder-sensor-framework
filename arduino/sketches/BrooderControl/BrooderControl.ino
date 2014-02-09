@@ -1,6 +1,10 @@
 /*
  * Brooder control v0.1.
  *
+ * Designed to create a simple temperature controlled environment
+ * for newly hatched chicks, ducklings, keets and other young
+ * birds.
+ *
  * Uses common-anode 7 segment LED display (2 digits) using
  * 7447 BCD to 7 segment decoder/driver for display output.
  *

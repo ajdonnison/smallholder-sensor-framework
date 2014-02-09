@@ -1,3 +1,16 @@
+/*
+ * "WattWorks" is the name of a commercial greywater system.
+ * The controller that came with it was pretty basic and this
+ * one has the benefit of beint able to log information and
+ * also to be remotely controlled.
+ * While originally designed for a particular system, it can
+ * manage any system where water level detection is used to
+ * control pump out.
+ *
+ * TODO:
+ * - Add timer for daily flush out
+ * - Change to use SoftTimer
+ */
 #include <XBee.h>
 #include <SoftwareSerial.h>
 #include <Saki.h>

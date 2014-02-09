@@ -1,3 +1,11 @@
+/*
+ * Tank level sensor using a guage pressure sensor.
+ * Has a visual indication of low, medium and high.
+ *
+ * TODO:
+ * - Add output to handle fill pump
+ * - Replace sensor with more accurate one
+ */
 #include <XBee.h>
 #include <SoftwareSerial.h>
 #include <Saki.h>

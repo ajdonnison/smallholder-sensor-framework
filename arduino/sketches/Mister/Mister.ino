@@ -1,3 +1,15 @@
+/*
+ * Misting control for chicken coops.
+ *
+ * Being in a very hot and dry area, we were at the risk of losing
+ * birds to heat stress.  Most of the yards have shadecloth attached
+ * so this was designed to mist water over them periodically once
+ * the trigger temperature is reached to create an evaporative
+ * cooling system.
+ *
+ * So far this has been working brilliantly.
+ *
+ */
 #include <DallasTemperature.h>
 #include <OneWire.h>
 #include <DelayRun.h>
@@ -117,3 +129,5 @@ void setup() {
   SoftTimer.add(&checkTempTask);
   clearDelayTask.startDelayed();
 }
+
+# vi:ft=cpp ai sw=2:

@@ -1,3 +1,16 @@
+/*
+ * Handle circulation pump for a home-made solar hot water system.
+ *
+ * Uses two Dallas 1-Wire temperature sensors, one at the top of
+ * the solar collector, one at the bottom, and only turns the
+ * pump on when there is sufficient heat so that it doesn't cause
+ * the collector to act as a radiator.
+ *
+ * TODO:
+ * - Automatically determine the addresses of sensors
+ * - Re-enabled XBee support for logging.
+ */
+
 // #include <XBee.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
