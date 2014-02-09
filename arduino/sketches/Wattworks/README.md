@@ -25,3 +25,7 @@ communications.
 In the future this controller will be enhanced to be able to handle
 the full range of functions the 8051 controller did.
 
+Note: It would appear that the Wattworks site has not been updated
+for several years and none of the listed distributors list any
+Wattworks products.  This controller could easily work with a
+simple tank/pump/solenoid system.
