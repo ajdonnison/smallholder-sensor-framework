@@ -76,4 +76,4 @@ void setup() {
   addressValid = false;
   SoftTimer.add(&checkTempTask);
 }
-# vi:ft=cpp sw=2 ai:
+// vi:ft=cpp sw=2 ai:

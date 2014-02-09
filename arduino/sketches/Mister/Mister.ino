@@ -130,4 +130,4 @@ void setup() {
   clearDelayTask.startDelayed();
 }
 
-# vi:ft=cpp ai sw=2:
+// vi:ft=cpp ai sw=2:
