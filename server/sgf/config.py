@@ -2,10 +2,8 @@
  Config handling routines for SGF project
 """
 
-import sys
-import re
-import os.path
 import ConfigParser
+import sys
 
 _CFG = {}
 
@@ -14,10 +12,7 @@ def get(**options):
     return _CFG
 
   cfg = ConfigParser.RawConfigParser(allow_no_value=True)
-  if not options['cfgfile']:
-    print "Must supply config file"
-    sys.exit(1)
-  
+
   try:
     cfg.read(options['cfgfile'])
     for sect in cfg.sections():
@@ -26,7 +21,7 @@ def get(**options):
         if _CFG[sect][key] and _CFG[sect][key].isdigit():
           _CFG[sect][key] = int(_CFG[sect][key])
 
-  except ConfigParser.Error:
+  except:
     print "Invalid configuration file - aborting"
     sys.exit(1)
   return _CFG
