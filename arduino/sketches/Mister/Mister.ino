@@ -14,6 +14,7 @@
 #include <OneWire.h>
 #include <DelayRun.h>
 #include <SoftTimer.h>
+#include <BlinkTask.h>
 
 #define ONE_WIRE_IF 2
 #define PUMP_OFFSET 3
@@ -22,6 +23,7 @@
 #define MAX_TEMP 36.0
 #define MIN_WAIT 240
 #define ON_TIME 30
+#define INDICATOR 13
 
 OneWire dataBus(ONE_WIRE_IF);
 DallasTemperature devManager(&dataBus);
@@ -60,10 +62,12 @@ boolean stopPump(Task *me) {
 DelayRun stopPumpTask(ON_TIME * 1000, stopPump);
 
 void checkTemp(Task *me) {
+  boolean show_indicator = false;
   devManager.requestTemperatures();
   if (startup_delay) {
     return;
   }
+  
   for (int i = 0; i < DEVICE_COUNT; i++) {
     nodes[i].temp = devManager.getTempC(*(nodes[i].sensor));
     Serial.print("Temp ");
@@ -86,16 +90,25 @@ void checkTemp(Task *me) {
         }
         break;
     }
+    if (nodes[i].status) {
+      show_indicator = true;
+    }
   }
+  digitalWrite(INDICATOR, show_indicator ? HIGH : LOW);
 }
+
+BlinkTask heartbeat(INDICATOR, 500);
 
 boolean clearDelay(Task *me) {
   startup_delay = false;
+  heartbeat.stop();
+  digitalWrite(INDICATOR, LOW);
   return true;
 }
 
 Task checkTempTask(1000, checkTemp);
-DelayRun clearDelayTask(5000, clearDelay);
+DelayRun clearDelayTask(6000, clearDelay);
+
 
 void setup() {
   // Set up the nodes array
@@ -103,12 +116,13 @@ void setup() {
   Serial.println("Starting");
   
   startup_delay = true;
+  heartbeat.start();
   for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
     int pin = PUMP_OFFSET + i;
     pinMode(pin, OUTPUT);
     digitalWrite(pin, LOW);
   }
-  for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
+/*  for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
     int pin = PUMP_OFFSET + i;
     Serial.print("Checking ");
     Serial.println(pin);
@@ -117,7 +131,7 @@ void setup() {
     digitalWrite(pin, LOW);
     Serial.println("done");
   }
-
+*/
   for (int i = 0; i < DEVICE_COUNT; i++) {
     nodes[i].sensor = sensor_list+i;
     nodes[i].pump = PUMP_OFFSET + i;
