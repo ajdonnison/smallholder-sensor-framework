@@ -1,79 +1,323 @@
 /*
- * This is a quick and nasty single-temperature controller.
- * The values chosen were for a poultry scalder used to
- * loosen the feathers prior to plucking.
- * While I could have done it without a micro controller,
- * I had all the components on the shelf.
+ * Version 2, uses a 4 digit 7-segment display
+ * along with both cooling and heating options
+ * and programmable set points.
  */
 #include <DallasTemperature.h>
+#include <PciManager.h>
 #include <OneWire.h>
 #include <DelayRun.h>
 #include <SoftTimer.h>
 #include <BlinkTask.h>
+#include <Debouncer.h>
+#include <LedControl.h>
+#include <avr/eeprom.h>
 
+// Pin definitions
 #define ONE_WIRE_IF 10
+#define RELAY 12
+#define CHIP_SELECT 2
+#define DATA_IN 3
+#define CLK 5
+#define BUTTON_DOWN 4
+#define BUTTON_UP 11
 #define INDICATOR 13
-#define HEATER 9
-#define CUT_OUT_TEMP 65
-#define HYSTERISIS 2
 
 OneWire dataBus(ONE_WIRE_IF);
 DallasTemperature devManager(&dataBus);
 float temperature;
 DeviceAddress thermometer;
 boolean addressValid = false;
-boolean heaterOn = false;
+boolean relayOn = false;
+boolean inSetup = false;
 
-BlinkTask errorLed(INDICATOR, 200);
-BlinkTask heating(INDICATOR, 1000);
+enum _set_mode {
+  run_mode = 0,
+  setup_mode,
+  hc_mode,
+  temp_mode,
+  hys_mode,
+  hold_mode
+} 
+set_mode;
+
+_set_mode current_top_level;
+
+char * mode_list[] = {
+  "RUN ",
+  "5et ",
+  "HC  ",
+  "TC  ",
+  "Diff",
+  "Hold"
+};
+
+char * hc_modes[] = {
+  "Heat",
+  "Cool"
+};
+
+struct _cfg {
+  uint8_t set_point;
+  uint8_t hysterisis;
+  uint8_t mode;
+  uint8_t changed;
+} 
+cfg;
+
+LedControl ld(DATA_IN, CLK, CHIP_SELECT,1);
+
+void writeConfig() {
+  uint32_t result;
+  if (cfg.changed) {
+    Serial.println("Write config");
+    cfg.changed = 0xa5;
+    memcpy(&result, &cfg, sizeof(uint32_t));
+    eeprom_write_dword((uint32_t *)0, result);
+    cfg.changed = 0;
+  }
+}
+
+void readConfig() {
+  uint32_t result;
+  result = eeprom_read_dword((uint32_t *)0);
+  memcpy(&cfg, &result, sizeof(uint32_t));
+  if (cfg.changed != 0xa5) {
+    cfg.set_point = 30;
+    cfg.mode = 1;
+    cfg.hysterisis = 2;
+    cfg.changed = 0xa5;
+    writeConfig();
+  }
+  cfg.changed = 0;
+}
+
+void displayString(const byte * str) {
+  for (int i = 0; i < 4; i++) {
+    ld.setChar(0, 3-i, str[i] & 0x7f, str[i] & 0x80); 
+  }
+}
+
+void displayTemp(float tempC) {
+  int temp;
+  byte str[4];
+
+  temp = tempC * 100;
+  str[3] = temp % 10;
+  str[2] = (temp / 10) % 10;
+  str[1] = ((temp / 100) % 10) | 0x80;
+  str[0] = (temp / 1000) % 10;
+
+  displayString(str);
+}
+
+/*
+ * Setup protocol
+ * Press Up button 2 seconds to go into setup
+ * Press up/down button to cycle through options
+ * Press Up button 2 seconds to select option
+ * Same within options, use up/down buttons - up button for 2 seconds to save
+ */
+void showMode() {
+  displayString((const byte *)mode_list[current_top_level]);
+}
+
+void changeMode() {
+  switch (set_mode) {
+  case run_mode: // In normal running mode, go to top-level setup
+    set_mode = setup_mode;
+    current_top_level = hc_mode;
+    showMode();
+    break;
+  case setup_mode: // In setup mode, select current mode
+    if (current_top_level == hold_mode) {
+      set_mode = run_mode;
+      writeConfig();
+      break;
+    } else {
+      set_mode = current_top_level;
+      showOptions();
+    }
+    break;
+  case hc_mode: // In lower level modes, save current option
+  case temp_mode:
+  case hys_mode:
+    set_mode = setup_mode;
+    showMode();
+    break;
+  case hold_mode: // In hold mode, save all options
+    set_mode = run_mode;
+    writeConfig();
+    break;
+  }
+}
+
+void showOptions() {
+  char str[5];
+  switch (set_mode) {
+  case hc_mode:
+    displayString((const byte *)hc_modes[cfg.mode]);
+    break;
+  case temp_mode:
+    sprintf(str, "  %2d", cfg.set_point);
+    displayString((const byte *)str);
+    break;
+  case hys_mode:
+    sprintf(str, "  %2d", cfg.hysterisis);
+    displayString((const byte *)str);
+    break;
+  }
+}
+
+void setMode(int inc) {
+  switch (set_mode) {
+  case setup_mode:
+    switch (current_top_level) {
+    case hold_mode:
+      current_top_level = hc_mode;
+      break;
+    case hc_mode:
+      current_top_level = temp_mode;
+      break;
+    case temp_mode:
+      current_top_level = hys_mode;
+      break;
+    case hys_mode:
+      current_top_level = hold_mode;
+      break;
+
+    }
+    showMode();
+    break;
+  case hc_mode:
+    cfg.mode = ! cfg.mode;
+    cfg.changed = 1;
+    showOptions();
+    break;
+  case temp_mode:
+    if ((inc > 0 && cfg.set_point < 99)
+      || (inc < 0 && cfg.set_point > 0)) {
+      cfg.set_point += inc;
+      cfg.changed = 1;
+    }
+    showOptions();
+    break;
+  case hys_mode:
+    if ((inc > 0 && cfg.hysterisis < 99)
+      || (inc < 0 && cfg.hysterisis > 0)) {
+      cfg.hysterisis += inc;
+      cfg.changed = 1;
+    }
+    showOptions();
+    break;
+  }
+}
+
+void upOn() {
+}
+
+void upOff(long unsigned int tm) {
+  if (tm > 2000) {
+    changeMode();
+  } 
+  else {
+    setMode(1);
+  }
+}
+
+void dnOn() {
+}
+
+void dnOff(long unsigned int tm) {
+  if (tm > 2000) {
+    changeMode();
+  } 
+  else {
+    setMode(-1);
+  }
+}
 
 void checkTemp(Task *me) {
+  if (set_mode != run_mode) {
+    return;
+  }
   if (! addressValid) {
     if (!devManager.getAddress(thermometer, 0)) {
       addressValid = false;
       Serial.println("No valid thermometer devices");
-      errorLed.start();
       return;
-    } else {
+    } 
+    else {
       addressValid = true;
-      errorLed.stop();
     }
   }
   devManager.requestTemperatures();
   temperature = devManager.getTempC(thermometer);
+  displayTemp(temperature);
   Serial.println(temperature);
-  if (temperature >= CUT_OUT_TEMP) {
-    if (heaterOn) {
-      digitalWrite(HEATER, LOW);
-      heating.stop();
-      heaterOn = false;
-      Serial.println("Turning heater off");
+  if (temperature >= cfg.set_point) {
+    if (cfg.mode && !relayOn) {
+      digitalWrite(RELAY, HIGH);
+      digitalWrite(INDICATOR, HIGH);
+      relayOn = true;
+      Serial.println("Turning cooler on");
+    } 
+    else if (!cfg.mode && relayOn) {
+      digitalWrite(RELAY, LOW);
+      digitalWrite(INDICATOR, LOW);
+      relayOn = false;
+      Serial.println("Turning relay off");
     }
-    digitalWrite(INDICATOR, HIGH);
-  } else if (temperature < (CUT_OUT_TEMP - HYSTERISIS)) {
-    if (!heaterOn) {
-      digitalWrite(HEATER, HIGH);
-      Serial.println("TUrning heater on");
-      heating.start();
-      heaterOn = true;
+  } 
+  else if (temperature < (cfg.set_point - cfg.hysterisis)) {
+    if (cfg.mode && relayOn) {
+      digitalWrite(RELAY, LOW);
+      digitalWrite(INDICATOR, LOW);
+      Serial.println("Turning cooler off");
+      relayOn = false;
+    } 
+    else if (!cfg.mode && !relayOn) {
+      digitalWrite(RELAY, HIGH);
+      digitalWrite(INDICATOR, HIGH);
+      Serial.println("Turning heater on");
+      relayOn = true;
     }
   }
 }
 
 Task checkTempTask(1000, checkTemp);
+Debouncer upButton(BUTTON_UP, MODE_CLOSE_ON_PUSH, upOn, upOff);
+Debouncer dnButton(BUTTON_DOWN, MODE_CLOSE_ON_PUSH, dnOn, dnOff);
 
 void setup() {
   // Set up the nodes array
   Serial.begin(9600);
   Serial.println("Starting");
-  
-  pinMode(HEATER, OUTPUT);
-  digitalWrite(HEATER, LOW);
+
+  pinMode(RELAY, OUTPUT);
+  pinMode(BUTTON_UP, INPUT);
+  pinMode(BUTTON_DOWN, INPUT);
   pinMode(INDICATOR, OUTPUT);
+
+  digitalWrite(RELAY, LOW);
   digitalWrite(INDICATOR, LOW);
-  heaterOn = false;
+  digitalWrite(BUTTON_UP, HIGH);
+  digitalWrite(BUTTON_DOWN, HIGH);
+
+  relayOn = false;
   devManager.begin();
   addressValid = false;
+  readConfig();
   SoftTimer.add(&checkTempTask);
+
+  PciManager.registerListener(BUTTON_UP, &upButton);
+  PciManager.registerListener(BUTTON_DOWN, &dnButton);
+
+  // Handle the LED array
+  ld.shutdown(0,false);
+  ld.setIntensity(0,8);
+  ld.setScanLimit(0,3);
+  ld.clearDisplay(0);
 }
 // vi:ft=cpp sw=2 ai:
+
