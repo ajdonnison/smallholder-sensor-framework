@@ -1,5 +1,6 @@
 /*
  * Version 2, uses a 4 digit 7-segment display
+ * and MAX7219 display driver chip
  * along with both cooling and heating options
  * and programmable set points.
  */
@@ -45,17 +46,29 @@ _set_mode current_top_level;
 
 char * mode_list[] = {
   "RUN ",
-  "5et ",
+  "5trt",
   "HC  ",
   "TC  ",
   "Diff",
-  "Hold"
+  "5et "
 };
 
 char * hc_modes[] = {
   "Heat",
   "Cool"
 };
+
+const char * msgs[] = {
+  "    ",
+  "----",
+  "Strt",
+  "Err"
+};
+
+#define DISPLAY_MSG_CLEAR 0
+#define DISPLAY_MSG_WRITE 1
+#define DISPLAY_MSG_START 2
+#define DISPLAY_MSG_ERROR 3
 
 struct _cfg {
   uint8_t set_point;
@@ -67,13 +80,25 @@ cfg;
 
 LedControl ld(DATA_IN, CLK, CHIP_SELECT,1);
 
+void displayString(const byte * str) {
+  for (int i = 0; i < 4; i++) {
+    ld.setChar(0, 3-i, str[i] & 0x7f, str[i] & 0x80); 
+  }
+}
+
+void displayMessage(int msg) {
+  displayString((const byte *)msgs[msg]);
+}
+
 void writeConfig() {
   uint32_t result;
   if (cfg.changed) {
     Serial.println("Write config");
     cfg.changed = 0xa5;
+    displayMessage(DISPLAY_MSG_WRITE);
     memcpy(&result, &cfg, sizeof(uint32_t));
     eeprom_write_dword((uint32_t *)0, result);
+    displayMessage(DISPLAY_MSG_CLEAR);
     cfg.changed = 0;
   }
 }
@@ -90,12 +115,6 @@ void readConfig() {
     writeConfig();
   }
   cfg.changed = 0;
-}
-
-void displayString(const byte * str) {
-  for (int i = 0; i < 4; i++) {
-    ld.setChar(0, 3-i, str[i] & 0x7f, str[i] & 0x80); 
-  }
 }
 
 void displayTemp(float tempC) {
@@ -133,7 +152,6 @@ void changeMode() {
     if (current_top_level == hold_mode) {
       set_mode = run_mode;
       writeConfig();
-      break;
     } else {
       set_mode = current_top_level;
       showOptions();
@@ -245,6 +263,7 @@ void checkTemp(Task *me) {
     if (!devManager.getAddress(thermometer, 0)) {
       addressValid = false;
       Serial.println("No valid thermometer devices");
+      displayMessage(DISPLAY_MSG_ERROR);
       return;
     } 
     else {
@@ -318,6 +337,7 @@ void setup() {
   ld.setIntensity(0,8);
   ld.setScanLimit(0,3);
   ld.clearDisplay(0);
+  displayMessage(DISPLAY_MSG_START);
 }
 // vi:ft=cpp sw=2 ai:
 
