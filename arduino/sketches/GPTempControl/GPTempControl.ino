@@ -61,7 +61,7 @@ char * hc_modes[] = {
 const char * msgs[] = {
   "    ",
   "----",
-  "Strt",
+  "5trt",
   "Err"
 };
 
