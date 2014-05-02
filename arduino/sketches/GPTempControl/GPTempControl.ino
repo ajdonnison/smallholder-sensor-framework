@@ -239,6 +239,7 @@ void upOn() {
 }
 
 void upOff(long unsigned int tm) {
+  SoftTimer.remove(&startModeChange);
   if (tm < SETUP_TIMER) {
     setMode(1);
   }
@@ -249,6 +250,7 @@ void dnOn() {
 }
 
 void dnOff(long unsigned int tm) {
+  SoftTimer.remove(&startModeChange);
   if (tm < SETUP_TIMER) {
     setMode(-1);
   }
