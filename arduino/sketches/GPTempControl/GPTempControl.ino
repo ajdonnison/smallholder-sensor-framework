@@ -1,4 +1,4 @@
-/*
+/**
  * Version 2, uses a 4 digit 7-segment display
  * and MAX7219 display driver chip
  * along with both cooling and heating options
@@ -9,7 +9,6 @@
 #include <OneWire.h>
 #include <DelayRun.h>
 #include <SoftTimer.h>
-#include <BlinkTask.h>
 #include <Debouncer.h>
 #include <LedControl.h>
 #include <avr/eeprom.h>
@@ -24,13 +23,14 @@
 #define BUTTON_UP 11
 #define INDICATOR 13
 
+#define SETUP_TIMER 2000
+
 OneWire dataBus(ONE_WIRE_IF);
 DallasTemperature devManager(&dataBus);
 float temperature;
 DeviceAddress thermometer;
 boolean addressValid = false;
 boolean relayOn = false;
-boolean inSetup = false;
 
 enum _set_mode {
   run_mode = 0,
@@ -44,7 +44,7 @@ set_mode;
 
 _set_mode current_top_level;
 
-char * mode_list[] = {
+const char * mode_list[] = {
   "RUN ",
   "5trt",
   "HC  ",
@@ -53,7 +53,7 @@ char * mode_list[] = {
   "5et "
 };
 
-char * hc_modes[] = {
+const char * hc_modes[] = {
   "Heat",
   "Cool"
 };
@@ -80,14 +80,14 @@ cfg;
 
 LedControl ld(DATA_IN, CLK, CHIP_SELECT,1);
 
-void displayString(const byte * str) {
+void displayString(const char * str) {
   for (int i = 0; i < 4; i++) {
     ld.setChar(0, 3-i, str[i] & 0x7f, str[i] & 0x80); 
   }
 }
 
 void displayMessage(int msg) {
-  displayString((const byte *)msgs[msg]);
+  displayString(msgs[msg]);
 }
 
 void writeConfig() {
@@ -119,7 +119,7 @@ void readConfig() {
 
 void displayTemp(float tempC) {
   int temp;
-  byte str[4];
+  char str[4];
 
   temp = tempC * 100;
   str[3] = temp % 10;
@@ -127,7 +127,7 @@ void displayTemp(float tempC) {
   str[1] = ((temp / 100) % 10) | 0x80;
   str[0] = (temp / 1000) % 10;
 
-  displayString(str);
+  displayString((const char *)str);
 }
 
 /*
@@ -138,10 +138,10 @@ void displayTemp(float tempC) {
  * Same within options, use up/down buttons - up button for 2 seconds to save
  */
 void showMode() {
-  displayString((const byte *)mode_list[current_top_level]);
+  displayString(mode_list[current_top_level]);
 }
 
-void changeMode() {
+boolean changeMode(Task * me) {
   switch (set_mode) {
   case run_mode: // In normal running mode, go to top-level setup
     set_mode = setup_mode;
@@ -168,21 +168,24 @@ void changeMode() {
     writeConfig();
     break;
   }
+  return true;
 }
+
+DelayRun startModeChange(SETUP_TIMER, changeMode);
 
 void showOptions() {
   char str[5];
   switch (set_mode) {
   case hc_mode:
-    displayString((const byte *)hc_modes[cfg.mode]);
+    displayString(hc_modes[cfg.mode]);
     break;
   case temp_mode:
     sprintf(str, "  %2d", cfg.set_point);
-    displayString((const byte *)str);
+    displayString(str);
     break;
   case hys_mode:
     sprintf(str, "  %2d", cfg.hysterisis);
-    displayString((const byte *)str);
+    displayString(str);
     break;
   }
 }
@@ -232,25 +235,21 @@ void setMode(int inc) {
 }
 
 void upOn() {
+  startModeChange.startDelayed();
 }
 
 void upOff(long unsigned int tm) {
-  if (tm > 2000) {
-    changeMode();
-  } 
-  else {
+  if (tm < SETUP_TIMER) {
     setMode(1);
   }
 }
 
 void dnOn() {
+  startModeChange.startDelayed();
 }
 
 void dnOff(long unsigned int tm) {
-  if (tm > 2000) {
-    changeMode();
-  } 
-  else {
+  if (tm < SETUP_TIMER) {
     setMode(-1);
   }
 }
