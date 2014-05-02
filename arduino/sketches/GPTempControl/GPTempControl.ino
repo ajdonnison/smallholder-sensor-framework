@@ -62,7 +62,7 @@ const char * msgs[] = {
   "    ",
   "----",
   "5trt",
-  "Err"
+  "Err "
 };
 
 #define DISPLAY_MSG_CLEAR 0
