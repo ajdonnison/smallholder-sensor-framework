@@ -12,18 +12,7 @@
 #include <Debouncer.h>
 #include <LedControl.h>
 #include <avr/eeprom.h>
-
-// Pin definitions
-#define ONE_WIRE_IF 10
-#define RELAY 12
-#define CHIP_SELECT 2
-#define DATA_IN 3
-#define CLK 5
-#define BUTTON_DOWN 4
-#define BUTTON_UP 11
-#define INDICATOR 13
-
-#define SETUP_TIMER 2000
+#include "setup.h"
 
 OneWire dataBus(ONE_WIRE_IF);
 DallasTemperature devManager(&dataBus);
@@ -31,6 +20,7 @@ float temperature;
 DeviceAddress thermometer;
 boolean addressValid = false;
 boolean relayOn = false;
+boolean relay2On = false;
 
 enum _set_mode {
   run_mode = 0,
@@ -122,8 +112,9 @@ void displayTemp(float tempC) {
   char str[4];
 
   temp = tempC * 100;
-  str[3] = temp % 10;
-  str[2] = (temp / 10) % 10;
+  //str[3] = temp % 10;
+  str[3] = 'C';
+  str[2] = ((temp + 5)/ 10) % 10;
   str[1] = ((temp / 100) % 10) | 0x80;
   str[0] = (temp / 1000) % 10;
 
@@ -305,7 +296,23 @@ void checkTemp(Task *me) {
   }
 }
 
+void checkLight(Task *me)
+{
+  if (HIGH == digitalRead(BUTTON_LIGHT)) {
+    if (! relay2On) {
+      relay2On = true;
+      digitalWrite(RELAY_2, HIGH);
+    }
+  } else {
+    if (relay2On) {
+      relay2On = false;
+      digitalWrite(RELAY_2, LOW);
+    }
+  }
+}
+
 Task checkTempTask(1000, checkTemp);
+Task checkLightButton(99, checkLight);
 Debouncer upButton(BUTTON_UP, MODE_CLOSE_ON_PUSH, upOn, upOff);
 Debouncer dnButton(BUTTON_DOWN, MODE_CLOSE_ON_PUSH, dnOn, dnOff);
 
@@ -315,20 +322,25 @@ void setup() {
   Serial.println("Starting");
 
   pinMode(RELAY, OUTPUT);
+  pinMode(RELAY_2, OUTPUT);
   pinMode(BUTTON_UP, INPUT);
   pinMode(BUTTON_DOWN, INPUT);
+  pinMode(BUTTON_LIGHT, INPUT);
   pinMode(INDICATOR, OUTPUT);
 
   digitalWrite(RELAY, LOW);
+  digitalWrite(RELAY_2, LOW);
   digitalWrite(INDICATOR, LOW);
   digitalWrite(BUTTON_UP, HIGH);
   digitalWrite(BUTTON_DOWN, HIGH);
+  digitalWrite(BUTTON_LIGHT, HIGH);
 
   relayOn = false;
   devManager.begin();
   addressValid = false;
   readConfig();
   SoftTimer.add(&checkTempTask);
+  SoftTimer.add(&checkLightButton);
 
   PciManager.registerListener(BUTTON_UP, &upButton);
   PciManager.registerListener(BUTTON_DOWN, &dnButton);
