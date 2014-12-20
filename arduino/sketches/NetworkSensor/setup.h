@@ -33,3 +33,5 @@
 #define BUTTON_LIGHT	A6
 
 #define SETUP_TIMER    2000
+
+#define CHANNEL		63

@@ -14,6 +14,8 @@
 #include <avr/eeprom.h>
 #include "setup.h"
 
+#define zeroFill(n) { int x = n / 10; Serial.write(x + '0'); Serial.write((n % 10) + '0'); }
+
 OneWire dataBus(ONE_WIRE_IF);
 DallasTemperature devManager(&dataBus);
 float temperature;
@@ -267,31 +269,39 @@ void checkTemp(Task *me) {
   displayTemp(temperature);
   Serial.println(temperature);
   if (temperature >= cfg.set_point) {
-    if (cfg.mode && !relayOn) {
+    if (cfg.mode) {
       digitalWrite(RELAY, HIGH);
       digitalWrite(INDICATOR, HIGH);
-      relayOn = true;
-      Serial.println("Turning cooler on");
+      if (!relayOn) {
+	relayOn = true;
+	Serial.println("Turning cooler on");
+      }
     } 
-    else if (!cfg.mode && relayOn) {
+    else {
       digitalWrite(RELAY, LOW);
       digitalWrite(INDICATOR, LOW);
-      relayOn = false;
-      Serial.println("Turning relay off");
+      if (relayOn) {
+	relayOn = false;
+	Serial.println("Turning heater off");
+      }
     }
   } 
   else if (temperature < (cfg.set_point - cfg.hysterisis)) {
-    if (cfg.mode && relayOn) {
+    if (cfg.mode) {
       digitalWrite(RELAY, LOW);
       digitalWrite(INDICATOR, LOW);
-      Serial.println("Turning cooler off");
-      relayOn = false;
+      if (relayOn) {
+	Serial.println("Turning cooler off");
+	relayOn = false;
+      }
     } 
-    else if (!cfg.mode && !relayOn) {
+    else {
       digitalWrite(RELAY, HIGH);
       digitalWrite(INDICATOR, HIGH);
-      Serial.println("Turning heater on");
-      relayOn = true;
+      if (!relayOn) {
+	Serial.println("Turning heater on");
+	relayOn = true;
+      }
     }
   }
 }
@@ -313,6 +323,7 @@ void checkLight(Task *me)
 
 Task checkTempTask(1000, checkTemp);
 Task checkLightButton(99, checkLight);
+
 Debouncer upButton(BUTTON_UP, MODE_CLOSE_ON_PUSH, upOn, upOff);
 Debouncer dnButton(BUTTON_DOWN, MODE_CLOSE_ON_PUSH, dnOn, dnOff);
 
@@ -353,4 +364,5 @@ void setup() {
   displayMessage(DISPLAY_MSG_START);
 }
 // vi:ft=cpp sw=2 ai:
+
 
