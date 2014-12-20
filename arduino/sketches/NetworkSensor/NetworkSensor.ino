@@ -9,7 +9,7 @@
 #include <AT24C32.h>
 #include "setup.h"
 
-#define zeroFill(x) { int y = x / 10; Serial.print(y); Serial.print(x%10); }
+#define zeroFill(x) { int y = x / 10; Serial.write('0'+y); Serial.write('0'+x%10); }
 
 RF24 radio(RADIO_CE,RADIO_CS);
 RF24Network network(radio);
@@ -83,7 +83,7 @@ doConfigure(void) {
 void
 printConfig(void) {
   Serial.print(F("Radio Address: "));
-  Serial.println(cfg.radio_address);
+  Serial.println(cfg.radio_address, OCT);
   Serial.print(F("Mode: "));
   if (cfg.relay) {
     Serial.println(F("Relay"));
