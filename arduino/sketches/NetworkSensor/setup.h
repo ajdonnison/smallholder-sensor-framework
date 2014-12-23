@@ -35,3 +35,4 @@
 #define SETUP_TIMER    2000
 
 #define CHANNEL		63
+#define MAX_TEMP_SENSORS	2
