@@ -40,18 +40,19 @@ uint8_t
 AT24C32::readBytes(uint16_t address, void * data, uint8_t count)
 {
   uint16_t read = 0;
-  setAddress(address);
-  Wire.endTransmission();
   for (int i = 0; i < count; i+=32) {
     uint8_t rcount = 32;
     if (count < (i+32)) {
       rcount = count - i;
     }
+    setAddress(address);
+    Wire.endTransmission();
     Wire.requestFrom(device_address, rcount);
     uint8_t * ptr = (uint8_t *)data + i;
     while (Wire.available()) {
       read++;
       *ptr++ = Wire.read();
+      address++;
     }
   }
   return read;
