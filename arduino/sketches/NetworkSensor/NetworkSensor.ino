@@ -42,6 +42,8 @@ struct _cfg {
  #define checkTemp()
 #endif
 
+#include "message.h"
+
 RF24 radio(RADIO_CE,RADIO_CS);
 RF24Network network(radio);
 AT24C32 eeprom(0);
@@ -87,7 +89,7 @@ configureTime(void)
 
   Serial.println(F("Time is not set"));
   while (set < DEFAULT_TIME) {
-    Serial.println(F("Please enter time as seconds in epoch"));
+    Serial.println(F("Please enter unix timestamp"));
     while (!Serial.available()) ;
     set = Serial.parseInt();
   }
@@ -98,18 +100,17 @@ configureTime(void)
 void
 printTime()
 {
-  Serial.print(year());
-  Serial.print("-");
-  zeroFill(month());
-  Serial.print("-");
-  zeroFill(day());
-  Serial.print(" ");
-  zeroFill(hour());
-  Serial.print(":");
-  zeroFill(minute());
-  Serial.print(":");
-  zeroFill(second());
-  Serial.println();
+  message_t tm;
+
+  tm.payload.time.year = year();
+  tm.payload.time.month = month();
+  tm.payload.time.day = day();
+  tm.payload.time.hour = hour();
+  tm.payload.time.minute = minute();
+  tm.payload.time.second = second();
+
+  RF24NetworkHeader hdr(0, 't');
+  network.write(hdr, (void *)&tm, sizeof(tm));
 }
 
 void
@@ -144,9 +145,8 @@ doConfigure(void) {
   while (!Serial.available());
   cfg.high_time = Serial.parseInt();
   cfg.mode = false;
-  cfg.sentinel = CONFIGURED;
-  eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
-  cfg.sentinel = 0;
+  cfg.sentinel = 1;
+  writeConfig();
 }
 
 void
@@ -179,12 +179,47 @@ printConfig(void) {
 void
 networkScanTask(Task *me)
 {
+  message_t msg;
+
   RF24NetworkHeader header;
   network.update();
   if (network.available()) {
     RF24NetworkHeader header;
-    network.peek(header);
-    // network.read(header, (void *)&payload, sizeof(payload));
+    network.read(header, (void *)&msg, sizeof(msg));
+    switch (header.type) {
+      case 'c': // Config
+        switch (msg.payload.config.item) {
+	  case 't': // Timestamp
+	    RTC.set(msg.payload.config.value);
+	    setTime(msg.payload.config.value);
+	    break;
+	  case 'h': // High Value
+	    cfg.high_point = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
+	  case 'l': // Low Value
+	    cfg.low_point = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
+	  case 'r': // Reference
+	    cfg.reference = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
+	  case 's': // Start time
+	    cfg.low_time = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
+	  case 'e': // End time
+	    cfg.high_time = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
+	}
+    }
   }
 }
 
@@ -194,22 +229,26 @@ sensorScanTask(Task *me)
   float test;
   float reference;
   uint16_t now;
-  struct {
-    uint32_t ms;
-    uint32_t counter;
-  } out_msg;
 
   if (set_mode != run_mode) {
     return;
   }
 
+  message_t msg;
+
+  msg.payload.sensor.type = 1;
+  msg.id = 1;
+
   tempSensors.requestTemperatures();
   test = tempSensors.getTempC(cfg.temp_sensors[0]);
+  msg.payload.sensor.value = test * 10;
+
   if (MAX_TEMP_SENSORS > 1) {
     reference = tempSensors.getTempC(cfg.temp_sensors[1]);
   } else {
     reference = test + cfg.reference;
   }
+  msg.payload.sensor.value_2 = reference * 10;
   Serial.print(test);
   Serial.write(':');
   Serial.println(reference);
@@ -218,30 +257,46 @@ sensorScanTask(Task *me)
   now = (hour() + TZ_OFFSET)%24 * 100 + minute();
   if (cfg.low_time < now && now < cfg.high_time) {
     digitalWrite(RELAY_2, HIGH);
+    msg.payload.sensor.value_3 = 1;
   } else {
     digitalWrite(RELAY_2, LOW);
+    msg.payload.sensor.value_3 = 0;
   }
 
   displayTemp(test);
 
   if (test < cfg.low_point) {
-    Serial.println(F("Test point below low cutout"));
     digitalWrite(RELAY,cfg.mode ? LOW : HIGH);
     digitalWrite(INDICATOR, cfg.mode ? LOW : HIGH);
+    msg.payload.sensor.value_4 = cfg.mode ? 0 : 1;
   }
   else if (test >= cfg.high_point && test >= reference && (test - reference) >= cfg.reference) {
-    Serial.println(F("High point reached"));
     digitalWrite(RELAY, cfg.mode ? HIGH : LOW);
     digitalWrite(INDICATOR, cfg.mode ? HIGH : LOW);
+    msg.payload.sensor.value_4 = cfg.mode ? 1 : 0;
   }
-  RF24NetworkHeader msg_hdr(0);
-  out_msg.counter = ++my_counter;
-  out_msg.ms = millis();
+  RF24NetworkHeader msg_hdr(0, 's');
     
-  if (network.write(msg_hdr, (void *)&out_msg, sizeof(out_msg))) {
+  if (network.write(msg_hdr, (void *)&msg, sizeof(msg))) {
     Serial.println(F("SENT OK"));
   } else {
     Serial.println(F("Failed TX"));
+  }
+}
+
+void
+readConfig(void)
+{
+  int read = eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
+}
+
+void
+writeConfig(void)
+{
+  if (cfg.sentinel) {
+    cfg.sentinel = CONFIGURED;
+    eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
+    cfg.sentinel = 0;
   }
 }
 
@@ -275,7 +330,7 @@ void setup(void)
 
   // check our configuration
   tempSensors.begin();
-  int read = eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
+  readConfig();
   if (cfg.sentinel != CONFIGURED) {
     doConfigure();
   }

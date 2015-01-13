@@ -7,8 +7,6 @@
 #include <AT24C32.h>
 #include "setup.h"
 
-extern AT24C32 eeprom;
-
 enum _set_mode {
   run_mode = 0,
   setup_mode,
@@ -98,11 +96,7 @@ boolean changeMode(Task *me) {
     case setup_mode:
       if (current_top_level == hold_mode) {
         set_mode = run_mode;
-	if (cfg.sentinel) {
-	  cfg.sentinel = CONFIGURED;
-	  eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
-	  cfg.sentinel = 0;
-	}
+	writeConfig();
       } else {
         set_mode = current_top_level;
 	showOptions();
@@ -116,11 +110,7 @@ boolean changeMode(Task *me) {
       break;
     case hold_mode:
       set_mode = run_mode;
-      if (cfg.sentinel) {
-	cfg.sentinel = CONFIGURED;
-        eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
-	cfg.sentinel = 0;
-      }
+      writeConfig();
       break;
   }
   return true;
@@ -210,16 +200,15 @@ void display_init() {
   PciManager.registerListener(BUTTON_UP, &upButton);
   PciManager.registerListener(BUTTON_DOWN, &dnButton);
 
-  eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
+  readConfig();
   if (cfg.sentinel != CONFIGURED) {
     displayMessage(DISPLAY_MSG_WRITE);
-    cfg.sentinel = CONFIGURED;
+    cfg.sentinel = 1;
     cfg.low_point = 30;
     cfg.high_point = 30;
     cfg.mode = true;
     cfg.reference = 2;
-    eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
-    cfg.sentinel = 0;
+    writeConfig();
   }
   ld.shutdown(0, false);
   ld.setIntensity(0,8);

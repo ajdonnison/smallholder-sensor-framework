@@ -39,3 +39,7 @@
 
 #define HAS_LED_DISPLAY 1
 #define TZ_OFFSET 10
+
+// some forward definitions to assist in include ordering
+void readConfig(void);
+void writeConfig(void);
