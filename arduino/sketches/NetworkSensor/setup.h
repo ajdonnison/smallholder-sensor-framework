@@ -34,5 +34,8 @@
 
 #define SETUP_TIMER    2000
 
-#define CHANNEL		63
-#define MAX_TEMP_SENSORS	2
+#define CHANNEL		90
+#define MAX_TEMP_SENSORS	1
+
+#define HAS_LED_DISPLAY 1
+#define TZ_OFFSET 10

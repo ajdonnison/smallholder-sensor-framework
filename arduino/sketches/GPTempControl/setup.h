@@ -32,4 +32,4 @@
 // A4, A5 are used by RTC.
 #define BUTTON_LIGHT	A6
 
-#define SETUP_TIMER    2000
+#define SETUP_TIMER    1500

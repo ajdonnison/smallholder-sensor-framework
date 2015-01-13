@@ -10,7 +10,6 @@
 #include <SoftTimer.h>
 #include <AT24C32.h>
 #include "setup.h"
-
 #define zeroFill(x) { int y = x / 10; Serial.write('0'+y); Serial.write('0'+x%10); }
 #define hexify(x) { char hex[16] = { '0', '1', '2', '3', '4', '5', '6' ,'7', \
 '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };\
@@ -18,21 +17,38 @@ int y = x / 16; \
 Serial.write(hex[y%16]); \
 Serial.write(hex[x%16]); }
 
-RF24 radio(RADIO_CE,RADIO_CS);
-RF24Network network(radio);
-AT24C32 eeprom(0);
-
-#define CONFIGURED 0xcf
-
 struct _cfg {
   uint8_t sentinel;
   uint8_t radio_address;
   DeviceAddress temp_sensors[MAX_TEMP_SENSORS];
-  float low_point;
-  float high_point;
-  float reference;
+  uint8_t low_point;
+  uint8_t high_point;
+  uint8_t reference;
+  uint16_t low_time;
+  uint16_t high_time;
   bool relay;
+  bool mode;
 } cfg;
+
+#define CONFIGURED 0xda
+
+#ifdef HAS_LED_DISPLAY
+ #include <LedControl.h>
+ LedControl ld(DATA_IN, CLK, CHIP_SELECT, 1);
+ #include "display.h"
+ _set_mode current_top_level;
+ _set_mode set_mode;
+#else
+ #define checkTemp()
+#endif
+
+RF24 radio(RADIO_CE,RADIO_CS);
+RF24Network network(radio);
+AT24C32 eeprom(0);
+
+bool haveMessage = false;
+uint32_t my_counter = 0;
+
 
 /*
  * Need to find out how many sensors we have on the 1-wire
@@ -97,37 +113,40 @@ printTime()
 }
 
 void
-printTimeTask(Task *me) {
-  printTime();
-}
-
-void
 doConfigure(void) {
   int val;
 
   cfg.radio_address = 0;
   while ( ! cfg.radio_address) {
-    Serial.println(F("Enter the octal address for the radio"));
+    Serial.println(F("Radio Address"));
     while (!Serial.available()) ;
     cfg.radio_address = Serial.parseInt();
   }
   Serial.println();
-  Serial.println(F("Is the radio a relay? (y/n)"));
+  Serial.println(F("Enable relay? (y/n)"));
   while (!Serial.available()) ;
   val = Serial.read();
   cfg.relay = (val == 'y' || val == 'Y');
   configureTemp();
-  Serial.println(F("Enter the cut out temperature"));
+  Serial.println(F("Low temperature"));
   while (!Serial.available());
-  cfg.low_point = Serial.parseFloat();
-  Serial.println(F("Enter the cut in temperature"));
+  cfg.low_point = Serial.parseInt();
+  Serial.println(F("High temperature"));
   while (!Serial.available());
-  cfg.high_point = Serial.parseFloat();
-  Serial.println(F("Enter the reference cut out difference"));
+  cfg.high_point = Serial.parseInt();
+  Serial.println(F("Temperature difference"));
   while (!Serial.available());
-  cfg.reference = Serial.parseFloat();
+  cfg.reference = Serial.parseInt();
+  Serial.println(F("Start time"));
+  while (!Serial.available());
+  cfg.low_time = Serial.parseInt();
+  Serial.println(F("End time"));
+  while (!Serial.available());
+  cfg.high_time = Serial.parseInt();
+  cfg.mode = false;
   cfg.sentinel = CONFIGURED;
   eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
+  cfg.sentinel = 0;
 }
 
 void
@@ -160,9 +179,12 @@ printConfig(void) {
 void
 networkScanTask(Task *me)
 {
+  RF24NetworkHeader header;
   network.update();
   if (network.available()) {
     RF24NetworkHeader header;
+    network.peek(header);
+    // network.read(header, (void *)&payload, sizeof(payload));
   }
 }
 
@@ -171,57 +193,69 @@ sensorScanTask(Task *me)
 {
   float test;
   float reference;
+  uint16_t now;
+  struct {
+    uint32_t ms;
+    uint32_t counter;
+  } out_msg;
+
+  if (set_mode != run_mode) {
+    return;
+  }
+
   tempSensors.requestTemperatures();
   test = tempSensors.getTempC(cfg.temp_sensors[0]);
-  reference = tempSensors.getTempC(cfg.temp_sensors[1]);
+  if (MAX_TEMP_SENSORS > 1) {
+    reference = tempSensors.getTempC(cfg.temp_sensors[1]);
+  } else {
+    reference = test + cfg.reference;
+  }
   Serial.print(test);
   Serial.write(':');
   Serial.println(reference);
- 
+
+  printTime();
+  now = (hour() + TZ_OFFSET)%24 * 100 + minute();
+  if (cfg.low_time < now && now < cfg.high_time) {
+    digitalWrite(RELAY_2, HIGH);
+  } else {
+    digitalWrite(RELAY_2, LOW);
+  }
+
+  displayTemp(test);
+
   if (test < cfg.low_point) {
     Serial.println(F("Test point below low cutout"));
-    digitalWrite(RELAY,LOW);
+    digitalWrite(RELAY,cfg.mode ? LOW : HIGH);
+    digitalWrite(INDICATOR, cfg.mode ? LOW : HIGH);
   }
-  else if (test > cfg.high_point && test > reference && (test - reference) > cfg.reference) {
+  else if (test >= cfg.high_point && test >= reference && (test - reference) >= cfg.reference) {
     Serial.println(F("High point reached"));
-    digitalWrite(RELAY, HIGH);
+    digitalWrite(RELAY, cfg.mode ? HIGH : LOW);
+    digitalWrite(INDICATOR, cfg.mode ? HIGH : LOW);
+  }
+  RF24NetworkHeader msg_hdr(0);
+  out_msg.counter = ++my_counter;
+  out_msg.ms = millis();
+    
+  if (network.write(msg_hdr, (void *)&out_msg, sizeof(out_msg))) {
+    Serial.println(F("SENT OK"));
   } else {
-    Serial.println(F("Default condition"));
-    digitalWrite(RELAY, LOW);
+    Serial.println(F("Failed TX"));
   }
 }
 
-
-/**
-void
-cfgScanTask(Task *me)
-{
- char buf[32];
- if (!Serial.available()) {
-  return;
- }
- memset((void *)buf, 0, 32);
- Serial.readBytes(buf, 31);
- switch (buf[0]) {
-   case 'T':
-   case 'L':
-   case 'H':
-   case 'R':
-    break;
- }
-}
-
-Task cfgScan(1000, cfgScanTask);
-*/
-
-Task timeDisplay(10000, printTimeTask);
-Task networkScan(10, networkScanTask);
+Task networkScan(100, networkScanTask);
 Task sensorScan(5000, sensorScanTask);
 
 void setup(void)
 {
   pinMode(RELAY, OUTPUT);
+  pinMode(RELAY_2, OUTPUT);
+  pinMode(INDICATOR, OUTPUT);
   digitalWrite(RELAY, LOW);
+  digitalWrite(RELAY_2, LOW);
+  digitalWrite(INDICATOR, LOW);
   Serial.begin(9600);
   Serial.println(F("Starting"));
   // First, check that we have time
@@ -237,7 +271,6 @@ void setup(void)
   } else {
     Serial.println(F("Time already set"));
   }
-  SoftTimer.add(&timeDisplay);
   SPI.begin();
 
   // check our configuration
@@ -252,7 +285,9 @@ void setup(void)
   network.begin(CHANNEL, cfg.radio_address);
   SoftTimer.add(&networkScan);
   SoftTimer.add(&sensorScan);
-  // SoftTimer.add(&cfgScan);
+  set_mode = run_mode;
+  current_top_level = run_mode;
+  display_init();
 }
 
 // vim:ft=cpp ai sw=2:

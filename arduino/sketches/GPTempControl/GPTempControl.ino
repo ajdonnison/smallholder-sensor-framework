@@ -321,7 +321,7 @@ void checkLight(Task *me)
   }
 }
 
-Task checkTempTask(1000, checkTemp);
+Task checkTempTask(5000, checkTemp);
 Task checkLightButton(99, checkLight);
 
 Debouncer upButton(BUTTON_UP, MODE_CLOSE_ON_PUSH, upOn, upOff);
