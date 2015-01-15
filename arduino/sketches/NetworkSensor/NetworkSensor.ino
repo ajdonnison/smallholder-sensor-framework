@@ -10,6 +10,8 @@
 #include <SoftTimer.h>
 #include <AT24C32.h>
 #include "setup.h"
+#include "message.h"
+
 #define zeroFill(x) { int y = x / 10; Serial.write('0'+y); Serial.write('0'+x%10); }
 #define hexify(x) { char hex[16] = { '0', '1', '2', '3', '4', '5', '6' ,'7', \
 '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };\
@@ -42,15 +44,12 @@ struct _cfg {
  #define checkTemp()
 #endif
 
-#include "message.h"
-
 RF24 radio(RADIO_CE,RADIO_CS);
 RF24Network network(radio);
 AT24C32 eeprom(0);
 
 bool haveMessage = false;
 uint32_t my_counter = 0;
-
 
 /*
  * Need to find out how many sensors we have on the 1-wire
@@ -82,19 +81,14 @@ configureTemp(void)
 }
 
 void
-configureTime(void)
+sendMessage(int type, message_t * msg)
 {
-  unsigned long set = 0L;
-  const unsigned long DEFAULT_TIME = 1400000000;
-
-  Serial.println(F("Time is not set"));
-  while (set < DEFAULT_TIME) {
-    Serial.println(F("Please enter unix timestamp"));
-    while (!Serial.available()) ;
-    set = Serial.parseInt();
+  RF24NetworkHeader hdr(0, type);
+  if (network.write(hdr, (void *)msg, sizeof(message_t))) {
+    Serial.println(F("msg sent"));
+  } else {
+    Serial.println(F("msg send fail"));
   }
-  RTC.set(set);
-  setTime(set);
 }
 
 void
@@ -109,71 +103,37 @@ printTime()
   tm.payload.time.minute = minute();
   tm.payload.time.second = second();
 
-  RF24NetworkHeader hdr(0, 't');
-  network.write(hdr, (void *)&tm, sizeof(tm));
+  sendMessage('t', &tm);
 }
 
 void
-doConfigure(void) {
-  int val;
+requestConfig(void) {
+  message_t cmsg;
 
-  cfg.radio_address = 0;
-  while ( ! cfg.radio_address) {
-    Serial.println(F("Radio Address"));
-    while (!Serial.available()) ;
-    cfg.radio_address = Serial.parseInt();
-  }
-  Serial.println();
-  Serial.println(F("Enable relay? (y/n)"));
-  while (!Serial.available()) ;
-  val = Serial.read();
-  cfg.relay = (val == 'y' || val == 'Y');
-  configureTemp();
-  Serial.println(F("Low temperature"));
-  while (!Serial.available());
-  cfg.low_point = Serial.parseInt();
-  Serial.println(F("High temperature"));
-  while (!Serial.available());
-  cfg.high_point = Serial.parseInt();
-  Serial.println(F("Temperature difference"));
-  while (!Serial.available());
-  cfg.reference = Serial.parseInt();
-  Serial.println(F("Start time"));
-  while (!Serial.available());
-  cfg.low_time = Serial.parseInt();
-  Serial.println(F("End time"));
-  while (!Serial.available());
-  cfg.high_time = Serial.parseInt();
-  cfg.mode = false;
-  cfg.sentinel = 1;
-  writeConfig();
+  cmsg.payload.config.item = 'a';
+  sendMessage('r', &cmsg);
 }
 
 void
 printConfig(void) {
-  Serial.print(F("Radio Address: "));
-  Serial.println(cfg.radio_address, OCT);
-  Serial.print(F("Mode: "));
-  if (cfg.relay) {
-    Serial.println(F("Relay"));
-  } else {
-    Serial.println(F("Leaf"));
-  }
-  for (int i = 0; i < MAX_TEMP_SENSORS; i++) {
-    Serial.print(F("Temperature "));
-    Serial.print(i);
-    Serial.print(F(": "));
-    for (int j = 0; j< 8; j++) {
-      hexify(cfg.temp_sensors[i][j]);
-    }
-    Serial.println();
-  }
-  Serial.print(F("Low point: "));
-  Serial.println(cfg.low_point);
-  Serial.print(F("High point: "));
-  Serial.println(cfg.high_point);
-  Serial.print(F("Reference difference: "));
-  Serial.println(cfg.reference);
+  // Send a series of config messages out.
+  message_t cmsg;
+
+  cmsg.payload.config.item = 'l';
+  cmsg.payload.config.value = cfg.low_point;
+  sendMessage('C', &cmsg);
+  cmsg.payload.config.item = 'h';
+  cmsg.payload.config.value = cfg.high_point;
+  sendMessage('C', &cmsg);
+  cmsg.payload.config.item = 'r';
+  cmsg.payload.config.value = cfg.reference;
+  sendMessage('C', &cmsg);
+  cmsg.payload.config.item = 's';
+  cmsg.payload.config.value = cfg.low_time;
+  sendMessage('C', &cmsg);
+  cmsg.payload.config.item = 'e';
+  cmsg.payload.config.value = cfg.high_time;
+  sendMessage('C', &cmsg);
 }
 
 void
@@ -187,6 +147,9 @@ networkScanTask(Task *me)
     RF24NetworkHeader header;
     network.read(header, (void *)&msg, sizeof(msg));
     switch (header.type) {
+      case 'r': // Request config
+         printConfig();
+	 break;
       case 'c': // Config
         switch (msg.payload.config.item) {
 	  case 't': // Timestamp
@@ -275,13 +238,7 @@ sensorScanTask(Task *me)
     digitalWrite(INDICATOR, cfg.mode ? HIGH : LOW);
     msg.payload.sensor.value_4 = cfg.mode ? 1 : 0;
   }
-  RF24NetworkHeader msg_hdr(0, 's');
-    
-  if (network.write(msg_hdr, (void *)&msg, sizeof(msg))) {
-    Serial.println(F("SENT OK"));
-  } else {
-    Serial.println(F("Failed TX"));
-  }
+  sendMessage('s', &msg);
 }
 
 void
@@ -321,23 +278,21 @@ void setup(void)
     delay(4000);
   }
 
-  if (timeStatus() != timeSet) {
-    configureTime();
-  } else {
-    Serial.println(F("Time already set"));
-  }
   SPI.begin();
 
   // check our configuration
   tempSensors.begin();
   readConfig();
   if (cfg.sentinel != CONFIGURED) {
-    doConfigure();
+    cfg.radio_address = RADIO_ADDRESS;
+    cfg.relay = RADIO_RELAY;
   }
-  printConfig();
 
   radio.begin();
   network.begin(CHANNEL, cfg.radio_address);
+  if (cfg.sentinel != CONFIGURED) {
+    requestConfig();
+  }
   SoftTimer.add(&networkScan);
   SoftTimer.add(&sensorScan);
   set_mode = run_mode;
