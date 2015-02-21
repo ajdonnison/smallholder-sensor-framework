@@ -34,14 +34,14 @@ struct _cfg {
 
 #define CONFIGURED 0xda
 
-#ifdef HAS_LED_DISPLAY
+#if HAS_LED_DISPLAY
  #include <LedControl.h>
  LedControl ld(DATA_IN, CLK, CHIP_SELECT, 1);
  #include "display.h"
  _set_mode current_top_level;
  _set_mode set_mode;
 #else
- #define checkTemp()
+ #define displayTemp(s)
 #endif
 
 RF24 radio(RADIO_CE,RADIO_CS);
@@ -193,9 +193,11 @@ sensorScanTask(Task *me)
   float reference;
   uint16_t now;
 
+#if HAS_LED_DISPLAY
   if (set_mode != run_mode) {
     return;
   }
+#endif
 
   message_t msg;
 
@@ -295,9 +297,11 @@ void setup(void)
   }
   SoftTimer.add(&networkScan);
   SoftTimer.add(&sensorScan);
+#if HAS_LED_DISPLAY
   set_mode = run_mode;
   current_top_level = run_mode;
   display_init();
+#endif
 }
 
 // vim:ft=cpp ai sw=2:
