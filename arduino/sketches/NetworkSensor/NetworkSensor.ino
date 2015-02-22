@@ -1,3 +1,14 @@
+/*
+ * Generic sensor and relay output.
+ * Currently supports 1 or 2 temperature sensors only
+ * should be generalised to others.
+ * Optionally supports a 7-segment 4 digit LED display
+ * and two button control.
+ * Can support heating or cooling modes, and either
+ * absolute or relative (1 or 2 sensors).
+ * Has two outputs, one controlled by time, the other
+ * by the temperature settings.
+ */
 #include <DallasTemperature.h>
 #include <OneWire.h>
 #include <RF24.h>
@@ -89,6 +100,8 @@ sendMessage(int type, message_t * msg)
   } else {
     Serial.println(F("msg send fail"));
   }
+  // And now we request a network update
+  networkScanTask((Task *)NULL);
 }
 
 void
@@ -134,6 +147,9 @@ printConfig(void) {
   cmsg.payload.config.item = 'e';
   cmsg.payload.config.value = cfg.high_time;
   sendMessage('C', &cmsg);
+  cmsg.payload.config.item = 'm';
+  cmsg.payload.config.value = cfg.mode;
+  sendMessage('C', &cmsg);
 }
 
 void
@@ -178,6 +194,11 @@ networkScanTask(Task *me)
 	    break;
 	  case 'e': // End time
 	    cfg.high_time = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
+	  case 'm': // Mode
+	    cfg.mode = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
 	    break;
