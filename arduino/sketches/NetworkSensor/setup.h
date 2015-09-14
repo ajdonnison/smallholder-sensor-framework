@@ -36,7 +36,7 @@
 
 #define CHANNEL		90
 #define MAX_TEMP_SENSORS	1
-#define RADIO_ADDRESS	2
+#define RADIO_ADDRESS	5
 #define RADIO_RELAY	true
 
 #define HAS_LED_DISPLAY 1

@@ -13,13 +13,14 @@ enum _set_mode {
   hc_mode,
   temp_mode,
   hys_mode,
+  addr_mode,
   hold_mode
 };
 
 extern _set_mode current_top_level;
 extern _set_mode set_mode;
 
-const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  Diff5et ";
+const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  Diff5et addr";
 
 
 #define DISPLAY_MSG_CLEAR 0
@@ -35,15 +36,38 @@ const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  Diff5et ";
 #define DISPLAY_CONF_MODE 8
 #define DISPLAY_CONF_TEMP 9
 #define DISPLAY_CONF_DIFF 10
-#define DISPLAY_CONF_SET 11
+#define DISPLAY_CONF_ADDR 11
+#define DISPLAY_CONF_SET 12
 
-struct _display_cfg {
-  uint8_t set_point;
-  uint8_t hysterisis;
-  uint8_t mode;
-  uint8_t changed;
-} display_cfg;
-
+uint8_t validate_address(uint16_t addr, int direction) {
+  uint8_t parts[4];
+  int i;
+  for (i = 0; i < 4; i++) {
+    parts[i] = (addr << i * 3) & 0x07;
+  }
+  if (direction > 0) {
+    parts[0]++;
+    for (i =0; i < 3; i++) {
+      if (parts[i] > 5) {
+        parts[i+1]++;
+	parts[i] = 0;
+      }
+    }
+  } else {
+    parts[0]--;
+    for (i = 0; i < 3; i++) {
+      if (parts[i] < 0) {
+        parts[i++]--;
+	parts[i] = 5;
+      }
+    }
+  }
+  addr = 0;
+  for (i = 0; i < 4; i++) {
+    addr |= (parts[i] >> i * 3) & 0x07;
+  }
+  return addr;
+}
 
 void displayString(const char * str) {
   for (int i = 0; i < 4; i++) {
@@ -82,6 +106,10 @@ void showOptions() {
       sprintf(str, "  %2d", cfg.reference);
       displayString(str);
       break;
+    case addr_mode:
+      sprintf(str, "%04o", cfg.radio_address);
+      displayString(str);
+      break;
   }
 }
 
@@ -105,6 +133,7 @@ boolean changeMode(Task *me) {
     case hc_mode:
     case temp_mode:
     case hys_mode:
+    case addr_mode:
       set_mode = setup_mode;
       showMode();
       break;
@@ -132,9 +161,11 @@ void setMode(int inc) {
       current_top_level = hys_mode;
       break;
     case hys_mode:
+      current_top_level = addr_mode;
+      break;
+    case addr_mode:
       current_top_level = hold_mode;
       break;
-
     }
     showMode();
     break;
@@ -157,6 +188,18 @@ void setMode(int inc) {
       || (inc < 0 && cfg.reference > 0)) {
       cfg.reference += inc;
       cfg.high_point = cfg.low_point + cfg.reference;
+      cfg.sentinel = 1;
+    }
+    showOptions();
+    break;
+  /*
+   * The address resolution is slightly tricky.  It is an octal number but limited
+   * to the digit 5, so 0,1,2,3,4,5,10,11,12,13,14,15, etc.
+   */
+  case addr_mode:
+    if ((inc > 0 && cfg.radio_address < 05555)
+      || (inc < 0 && cfg.radio_address > 0)) {
+      cfg.radio_address = validate_address(cfg.radio_address, inc);
       cfg.sentinel = 1;
     }
     showOptions();

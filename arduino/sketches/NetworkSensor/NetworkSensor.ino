@@ -32,7 +32,7 @@ Serial.write(hex[x%16]); }
 
 struct _cfg {
   uint8_t sentinel;
-  uint8_t radio_address;
+  uint16_t radio_address;
   DeviceAddress temp_sensors[MAX_TEMP_SENSORS];
   uint8_t low_point;
   uint8_t high_point;
@@ -43,7 +43,7 @@ struct _cfg {
   bool mode;
 } cfg;
 
-#define CONFIGURED 0xda
+#define CONFIGURED 0xd0
 
 #if HAS_LED_DISPLAY
  #include <LedControl.h>
@@ -202,6 +202,11 @@ networkScanTask(Task *me)
 	    cfg.sentinel = 1;
 	    writeConfig();
 	    break;
+	  case 'a': // Address
+	    cfg.radio_address = msg.payload.config.value;
+	    cfg.sentinel = 1;
+	    writeConfig();
+	    break;
 	}
     }
   }
@@ -314,6 +319,7 @@ void setup(void)
   radio.begin();
   network.begin(CHANNEL, cfg.radio_address);
   if (cfg.sentinel != CONFIGURED) {
+    Serial.println(F("Request Config"));
     requestConfig();
   }
   SoftTimer.add(&networkScan);

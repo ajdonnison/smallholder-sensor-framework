@@ -71,7 +71,7 @@ AT24C32::writeByte(uint16_t address, uint8_t data)
 uint16_t
 AT24C32::writeBytes(uint16_t address, void * data, uint8_t count)
 {
-  uint16_t written;
+  uint16_t written = 0;
   for (int i = 0; i < count; i+= 32) {
     int rcount = 32;
     if (count < (i+32)) {
