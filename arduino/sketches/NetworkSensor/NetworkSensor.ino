@@ -16,19 +16,10 @@
 #include <SPI.h>
 #include <Time.h>
 #include <Wire.h>
-#include <DS1307RTC.h>
 #include <PciManager.h>
 #include <SoftTimer.h>
-#include <AT24C32.h>
 #include "setup.h"
 #include "message.h"
-
-#define zeroFill(x) { int y = x / 10; Serial.write('0'+y); Serial.write('0'+x%10); }
-#define hexify(x) { char hex[16] = { '0', '1', '2', '3', '4', '5', '6' ,'7', \
-'8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };\
-int y = x / 16; \
-Serial.write(hex[y%16]); \
-Serial.write(hex[x%16]); }
 
 struct _cfg {
   uint8_t sentinel;
@@ -43,7 +34,11 @@ struct _cfg {
   bool mode;
 } cfg;
 
-#define CONFIGURED 0xd0
+#define CONFIGURED 0xd1
+
+#if HAS_RTC
+ #include <DS1307RTC.h>
+#endif
 
 #if HAS_LED_DISPLAY
  #include <LedControl.h>
@@ -57,7 +52,10 @@ struct _cfg {
 
 RF24 radio(RADIO_CE,RADIO_CS);
 RF24Network network(radio);
-AT24C32 eeprom(0);
+#if HAS_EEPROM
+ #include <AT24C32.h>
+ AT24C32 eeprom(0);
+#endif
 
 bool haveMessage = false;
 uint32_t my_counter = 0;
@@ -169,7 +167,9 @@ networkScanTask(Task *me)
       case 'c': // Config
         switch (msg.payload.config.item) {
 	  case 't': // Timestamp
+#if HAS_RTC
 	    RTC.set(msg.payload.config.value);
+#endif
 	    setTime(msg.payload.config.value);
 	    break;
 	  case 'h': // High Value
@@ -272,17 +272,21 @@ sensorScanTask(Task *me)
 void
 readConfig(void)
 {
+#if HAS_EEPROM
   int read = eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
+#endif
 }
 
 void
 writeConfig(void)
 {
+#if HAS_EEPROM
   if (cfg.sentinel) {
     cfg.sentinel = CONFIGURED;
     eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
     cfg.sentinel = 0;
   }
+#endif
 }
 
 Task networkScan(100, networkScanTask);
@@ -299,12 +303,16 @@ void setup(void)
   Serial.begin(9600);
   Serial.println(F("Starting"));
   // First, check that we have time
+#if HAS_RTC
   setSyncProvider(RTC.get);
+#endif
   timeStatus();
+#if HAS_RTC
   while (! RTC.chipPresent()) {
     Serial.println(F("Failed to find RTC ... Check connections"));
     delay(4000);
   }
+#endif
 
   SPI.begin();
 
@@ -314,6 +322,7 @@ void setup(void)
   if (cfg.sentinel != CONFIGURED) {
     cfg.radio_address = RADIO_ADDRESS;
     cfg.relay = RADIO_RELAY;
+    configureTemp();
   }
 
   radio.begin();

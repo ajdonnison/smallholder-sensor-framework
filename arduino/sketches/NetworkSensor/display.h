@@ -20,7 +20,7 @@ enum _set_mode {
 extern _set_mode current_top_level;
 extern _set_mode set_mode;
 
-const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  Diff5et addr";
+const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  Diffaddr5et ";
 
 
 #define DISPLAY_MSG_CLEAR 0
