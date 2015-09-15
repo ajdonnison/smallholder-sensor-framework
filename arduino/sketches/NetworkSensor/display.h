@@ -246,6 +246,7 @@ void display_init() {
   readConfig();
   if (cfg.sentinel != CONFIGURED) {
     displayMessage(DISPLAY_MSG_WRITE);
+    configureTemp();
     cfg.sentinel = 1;
     cfg.low_point = 30;
     cfg.high_point = 30;

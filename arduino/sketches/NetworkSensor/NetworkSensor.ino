@@ -34,7 +34,7 @@ struct _cfg {
   bool mode;
 } cfg;
 
-#define CONFIGURED 0xd1
+#define CONFIGURED 0xd2
 
 #if HAS_RTC
  #include <DS1307RTC.h>
