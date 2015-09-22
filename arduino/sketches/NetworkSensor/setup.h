@@ -1,18 +1,4 @@
 // Include for handling hardware specific pinouts
-/*
-// Original set
-#define ONE_WIRE_IF      10
-#define RELAY            12
-#define RELAY_2          11
-#define INDICATOR        13
-#define CHIP_SELECT       2
-#define DATA_IN           3
-#define CLK               5
-#define BUTTON_UP         6
-#define BUTTON_DOWN       4
-#define BUTTON_LIGHT      7
-*/
-
 // Redefined to include radio and RTC
 // 0,1 are used by serial connection.
 #define	RELAY		2
@@ -36,13 +22,16 @@
 
 #define CHANNEL		90
 #define MAX_TEMP_SENSORS	1
-#define RADIO_ADDRESS	01
+#define RADIO_ADDRESS	04
 #define RADIO_RELAY	true
+#define NETWORK_LOOP_MS	54
+#define SENSOR_LOOP_MS	5000
 
 #define HAS_LED_DISPLAY 1
 #define TZ_OFFSET 10
 #define HAS_EEPROM 1
 #define HAS_RTC 1
+#define HAS_TIMED_RELAY 1
 
 // some forward definitions to assist in include ordering
 void readConfig(void);

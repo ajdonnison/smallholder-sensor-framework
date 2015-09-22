@@ -9,16 +9,19 @@
  * Has two outputs, one controlled by time, the other
  * by the temperature settings.
  */
+#include "setup.h"
+#include <Wire.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
 #include <RF24.h>
 #include <RF24Network.h>
 #include <SPI.h>
 #include <Time.h>
-#include <Wire.h>
+#if HAS_RTC
+ #include <DS1307RTC.h>
+#endif
 #include <PciManager.h>
 #include <SoftTimer.h>
-#include "setup.h"
 #include "message.h"
 
 struct _cfg {
@@ -34,11 +37,7 @@ struct _cfg {
   bool mode;
 } cfg;
 
-#define CONFIGURED 0xd2
-
-#if HAS_RTC
- #include <DS1307RTC.h>
-#endif
+#define CONFIGURED 0xd3
 
 #if HAS_LED_DISPLAY
  #include <LedControl.h>
@@ -246,6 +245,7 @@ sensorScanTask(Task *me)
 
   printTime();
   now = (hour() + TZ_OFFSET)%24 * 100 + minute();
+#if HAS_TIMED_RELAY
   if (cfg.low_time < now && now < cfg.high_time) {
     digitalWrite(RELAY_2, HIGH);
     msg.payload.sensor.value_3 = 1;
@@ -253,6 +253,7 @@ sensorScanTask(Task *me)
     digitalWrite(RELAY_2, LOW);
     msg.payload.sensor.value_3 = 0;
   }
+#endif
 
   displayTemp(test);
 
@@ -289,17 +290,19 @@ writeConfig(void)
 #endif
 }
 
-Task networkScan(100, networkScanTask);
-Task sensorScan(5000, sensorScanTask);
+Task networkScan(NETWORK_LOOP_MS, networkScanTask);
+Task sensorScan(SENSOR_LOOP_MS, sensorScanTask);
 
 void setup(void)
 {
   pinMode(RELAY, OUTPUT);
-  pinMode(RELAY_2, OUTPUT);
-  pinMode(INDICATOR, OUTPUT);
   digitalWrite(RELAY, LOW);
-  digitalWrite(RELAY_2, LOW);
+  pinMode(INDICATOR, OUTPUT);
   digitalWrite(INDICATOR, LOW);
+#if HAS_TIMED_RELAY
+  pinMode(RELAY_2, OUTPUT);
+  digitalWrite(RELAY_2, LOW);
+#endif
   Serial.begin(9600);
   Serial.println(F("Starting"));
   // First, check that we have time
@@ -309,7 +312,16 @@ void setup(void)
   timeStatus();
 #if HAS_RTC
   while (! RTC.chipPresent()) {
+    timeStatus_t t;
     Serial.println(F("Failed to find RTC ... Check connections"));
+    t = timeStatus();
+    if (t != timeSet) {
+      if (t == timeNotSet) {
+        Serial.println(F("Time NOT SET"));
+      } else {
+        Serial.println(F("Time Needs SYNC"));
+      }
+    }
     delay(4000);
   }
 #endif

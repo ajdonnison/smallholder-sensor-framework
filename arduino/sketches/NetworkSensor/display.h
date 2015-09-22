@@ -43,7 +43,7 @@ uint8_t validate_address(uint16_t addr, int direction) {
   uint8_t parts[4];
   int i;
   for (i = 0; i < 4; i++) {
-    parts[i] = (addr << i * 3) & 0x07;
+    parts[i] = ((addr << (i * 3)) & 0x07);
   }
   if (direction > 0) {
     parts[0]++;
@@ -64,7 +64,7 @@ uint8_t validate_address(uint16_t addr, int direction) {
   }
   addr = 0;
   for (i = 0; i < 4; i++) {
-    addr |= (parts[i] >> i * 3) & 0x07;
+    addr |= ((parts[i] >> (i * 3)) & 0x07);
   }
   return addr;
 }
