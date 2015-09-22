@@ -102,7 +102,7 @@ sendMessage(int type, message_t * msg)
 }
 
 void
-printTime()
+sendTime()
 {
   message_t tm;
 
@@ -116,6 +116,26 @@ printTime()
   sendMessage('t', &tm);
 }
 
+#if DEBUG
+void
+printTime()
+{
+  Serial.print(hour());
+  Serial.print(":");
+  Serial.print(minute());
+  Serial.print(":");
+  Serial.print(second());
+  Serial.print(" ");
+  Serial.print(day());
+  Serial.print("/");
+  Serial.print(month());
+  Serial.print("/");
+  Serial.println(year());
+}
+#else
+#define printTime()
+#endif
+
 void
 requestConfig(void) {
   message_t cmsg;
@@ -125,7 +145,7 @@ requestConfig(void) {
 }
 
 void
-printConfig(void) {
+sendConfig(void) {
   // Send a series of config messages out.
   message_t cmsg;
 
@@ -161,7 +181,7 @@ networkScanTask(Task *me)
     network.read(header, (void *)&msg, sizeof(msg));
     switch (header.type) {
       case 'r': // Request config
-         printConfig();
+         sendConfig();
 	 break;
       case 'c': // Config
         switch (msg.payload.config.item) {
@@ -243,7 +263,7 @@ sensorScanTask(Task *me)
   Serial.write(':');
   Serial.println(reference);
 
-  printTime();
+  sendTime();
   now = (hour() + TZ_OFFSET)%24 * 100 + minute();
 #if HAS_TIMED_RELAY
   if (cfg.low_time < now && now < cfg.high_time) {
@@ -270,11 +290,36 @@ sensorScanTask(Task *me)
   sendMessage('s', &msg);
 }
 
+#if DEBUG
+void
+printConfig(void)
+{
+  Serial.print("ADDR:");
+  Serial.println(cfg.radio_address);
+  Serial.print("Low Temp:");
+  Serial.println(cfg.low_point);
+  Serial.print("High Temp:");
+  Serial.println(cfg.high_point);
+  Serial.print("Reference:");
+  Serial.println(cfg.reference);
+  Serial.print("Low Time:");
+  Serial.println(cfg.low_time);
+  Serial.print("High Time:");
+  Serial.println(cfg.high_time);
+}
+#else
+#define printConfig()
+#endif
+
 void
 readConfig(void)
 {
 #if HAS_EEPROM
   int read = eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
+#else
+#if DEBUG
+  Serial.println("No EEPROM - returning random data");
+#endif
 #endif
 }
 
@@ -336,11 +381,16 @@ void setup(void)
     cfg.relay = RADIO_RELAY;
     configureTemp();
   }
-
+  if (cfg.radio_address > 05555) {
+    cfg.radio_address = RADIO_ADDRESS; // Sanity Check.
+  }
+  printConfig();
   radio.begin();
   network.begin(CHANNEL, cfg.radio_address);
   if (cfg.sentinel != CONFIGURED) {
+#if DEBUG
     Serial.println(F("Request Config"));
+#endif
     requestConfig();
   }
   SoftTimer.add(&networkScan);

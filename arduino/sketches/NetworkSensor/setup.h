@@ -33,6 +33,8 @@
 #define HAS_RTC 1
 #define HAS_TIMED_RELAY 1
 
+#define DEBUG 1
+
 // some forward definitions to assist in include ordering
 void readConfig(void);
 void writeConfig(void);
