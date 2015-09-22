@@ -22,9 +22,9 @@
 
 #define CHANNEL		90
 #define MAX_TEMP_SENSORS	1
-#define RADIO_ADDRESS	04
+#define RADIO_ADDRESS	013
 #define RADIO_RELAY	true
-#define NETWORK_LOOP_MS	54
+#define NETWORK_LOOP_MS	50
 #define SENSOR_LOOP_MS	5000
 
 #define HAS_LED_DISPLAY 1

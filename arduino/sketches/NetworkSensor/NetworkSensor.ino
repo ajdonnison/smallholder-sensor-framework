@@ -290,8 +290,8 @@ writeConfig(void)
 #endif
 }
 
-Task networkScan(NETWORK_LOOP_MS, networkScanTask);
-Task sensorScan(SENSOR_LOOP_MS, sensorScanTask);
+Task networkScan(RADIO_ADDRESS + NETWORK_LOOP_MS, networkScanTask);
+Task sensorScan(RADIO_ADDRESS + SENSOR_LOOP_MS, sensorScanTask);
 
 void setup(void)
 {
