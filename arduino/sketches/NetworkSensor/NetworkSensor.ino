@@ -26,18 +26,16 @@
 
 struct _cfg {
   uint8_t sentinel;
-  uint16_t radio_address;
-  DeviceAddress temp_sensors[MAX_TEMP_SENSORS];
   uint8_t low_point;
   uint8_t high_point;
   uint8_t reference;
   uint16_t low_time;
   uint16_t high_time;
+  uint16_t radio_address;
   bool relay;
   bool mode;
+  DeviceAddress temp_sensors[MAX_TEMP_SENSORS];
 } cfg;
-
-#define CONFIGURED 0xd3
 
 #if HAS_LED_DISPLAY
  #include <LedControl.h>

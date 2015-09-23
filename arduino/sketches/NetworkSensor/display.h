@@ -52,36 +52,6 @@ const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  DiffaddrT HrT -NL H
 #define DISPLAY_CONF_HIGH_MN 17
 #define DISPLAY_CONF_SET 18
 
-uint8_t validate_address(uint16_t addr, int direction) {
-  uint8_t parts[4];
-  int i;
-  for (i = 0; i < 4; i++) {
-    parts[i] = ((addr << (i * 3)) & 0x07);
-  }
-  if (direction > 0) {
-    parts[0]++;
-    for (i =0; i < 3; i++) {
-      if (parts[i] > 5) {
-        parts[i+1]++;
-	parts[i] = 0;
-      }
-    }
-  } else {
-    parts[0]--;
-    for (i = 0; i < 3; i++) {
-      if (parts[i] < 0) {
-        parts[i++]--;
-	parts[i] = 5;
-      }
-    }
-  }
-  addr = 0;
-  for (i = 0; i < 4; i++) {
-    addr |= ((parts[i] >> (i * 3)) & 0x07);
-  }
-  return addr;
-}
-
 void displayString(const char * str) {
   for (int i = 0; i < 4; i++) {
    ld.setChar(0, 3-i, str[i] & 0x7f, str[i] & 0x80);
@@ -91,6 +61,13 @@ void displayString(const char * str) {
 void displayNumber(const char * format, int number) {
   char str[5];
   sprintf(str, format, number % 10000);
+#if DEBUG
+  Serial.print(format);
+  Serial.print(":");
+  Serial.print(number);
+  Serial.print(":");
+  Serial.println(str);
+#endif
   displayString(str);
 }
 
@@ -124,7 +101,7 @@ void showOptions() {
       displayNumber("  %2d", cfg.reference);
       break;
     case addr_mode:
-      displayNumber("%04o", cfg.radio_address);
+      displayNumber("%04o", cfg.radio_address & 0xfff);
       break;
     case time_hour_mode:
       displayNumber("  %02d", hour());
@@ -237,16 +214,12 @@ void setMode(int inc) {
     }
     showOptions();
     break;
-  /*
-   * The address resolution is slightly tricky.  It is an octal number but limited
-   * to the digit 5, so 0,1,2,3,4,5,10,11,12,13,14,15, etc.
-   */
   case addr_mode:
-    if ((inc > 0 && cfg.radio_address < 05555)
-      || (inc < 0 && cfg.radio_address > 0)) {
-      cfg.radio_address = validate_address(cfg.radio_address, inc);
-      cfg.sentinel = 1;
+    cfg.radio_address += inc;
+    if (cfg.radio_address > 05555 || cfg.radio_address < 0) {
+      cfg.radio_address = 0;
     }
+    cfg.sentinel = 1;
     showOptions();
     break;
   case time_hour_mode:
@@ -264,6 +237,9 @@ void setMode(int inc) {
      min  = increment_minute(min, inc);
     }
     setTime(hr, min, sec, dy, mth, yr);
+#if HAS_RTC
+    RTC.set(now());
+#endif
     showOptions();
     break;
   case low_hour_mode:
@@ -340,8 +316,10 @@ void display_init() {
     cfg.sentinel = 1;
     cfg.low_point = 30;
     cfg.high_point = 30;
-    cfg.mode = true;
-    cfg.reference = 2;
+    cfg.low_time = 700;
+    cfg.high_time = 1900;
+    cfg.mode = false;
+    cfg.reference = 0;
     writeConfig();
   }
   ld.shutdown(0, false);
