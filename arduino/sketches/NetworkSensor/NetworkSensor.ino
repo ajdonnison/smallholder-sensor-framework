@@ -9,6 +9,7 @@
  * Has two outputs, one controlled by time, the other
  * by the temperature settings.
  */
+#include "pins.h"
 #include "setup.h"
 #include <Wire.h>
 #include <DallasTemperature.h>
@@ -56,6 +57,7 @@ RF24Network network(radio);
 
 bool haveMessage = false;
 uint32_t my_counter = 0;
+sensor_msg_t last_status;
 
 /*
  * Need to find out how many sensors we have on the 1-wire
@@ -91,16 +93,20 @@ sendMessage(int type, message_t * msg)
 {
   RF24NetworkHeader hdr(0, type);
   if (network.write(hdr, (void *)msg, sizeof(message_t))) {
+#if DEBUG
     Serial.println(F("msg sent"));
+#endif
   } else {
+#if DEBUG
     Serial.println(F("msg send fail"));
+#endif
   }
   // And now we request a network update
   networkScanTask((Task *)NULL);
 }
 
 void
-sendTime()
+sendTime(void)
 {
   message_t tm;
 
@@ -143,44 +149,46 @@ requestConfig(void) {
 }
 
 void
-sendConfig(void) {
+sendConfigItem(uint32_t item, uint32_t value) {
+  message_t cmsg;
+  cmsg.payload.config.item = item;
+  cmsg.payload.config.value = value;
+  sendMessage('C', &cmsg);
+}
+
+void
+sendConfig() {
   // Send a series of config messages out.
   message_t cmsg;
 
-  cmsg.payload.config.item = 'l';
-  cmsg.payload.config.value = cfg.low_point;
-  sendMessage('C', &cmsg);
-  cmsg.payload.config.item = 'h';
-  cmsg.payload.config.value = cfg.high_point;
-  sendMessage('C', &cmsg);
-  cmsg.payload.config.item = 'r';
-  cmsg.payload.config.value = cfg.reference;
-  sendMessage('C', &cmsg);
-  cmsg.payload.config.item = 's';
-  cmsg.payload.config.value = cfg.low_time;
-  sendMessage('C', &cmsg);
-  cmsg.payload.config.item = 'e';
-  cmsg.payload.config.value = cfg.high_time;
-  sendMessage('C', &cmsg);
-  cmsg.payload.config.item = 'm';
-  cmsg.payload.config.value = cfg.mode;
-  sendMessage('C', &cmsg);
+  sendConfigItem('l', cfg.low_point);
+  sendConfigItem('h', cfg.high_point);
+  sendConfigItem('r', cfg.reference);
+  sendConfigItem('s', cfg.low_time);
+  sendConfigItem('e', cfg.high_time);
+  sendConfigItem('m', cfg.mode);
 }
 
 void
 networkScanTask(Task *me)
 {
-  message_t msg;
+  message_t msg, s_msg;
 
   RF24NetworkHeader header;
   network.update();
-  if (network.available()) {
-    RF24NetworkHeader header;
+  while (network.available()) {
     network.read(header, (void *)&msg, sizeof(msg));
     switch (header.type) {
       case 'r': // Request config
-         sendConfig();
-	 break;
+	sendConfig();
+	break;
+      case 't': // Request time
+        sendTime();
+	break;
+      case 's': // Request status
+	memcpy(&(s_msg.payload.sensor), &last_status, sizeof(sensor_msg_t));
+	sendMessage('s', &s_msg);
+	break;
       case 'c': // Config
         switch (msg.payload.config.item) {
 	  case 't': // Timestamp
@@ -188,41 +196,49 @@ networkScanTask(Task *me)
 	    RTC.set(msg.payload.config.value);
 #endif
 	    setTime(msg.payload.config.value);
+	    sendTime();
 	    break;
 	  case 'h': // High Value
 	    cfg.high_point = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('h', cfg.high_point);
 	    break;
 	  case 'l': // Low Value
 	    cfg.low_point = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('l', cfg.low_point);
 	    break;
 	  case 'r': // Reference
 	    cfg.reference = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('r', cfg.reference);
 	    break;
 	  case 's': // Start time
 	    cfg.low_time = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('s', cfg.low_time);
 	    break;
 	  case 'e': // End time
 	    cfg.high_time = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('e', cfg.high_time);
 	    break;
 	  case 'm': // Mode
 	    cfg.mode = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('m', cfg.mode);
 	    break;
 	  case 'a': // Address
 	    cfg.radio_address = msg.payload.config.value;
 	    cfg.sentinel = 1;
 	    writeConfig();
+	    sendConfigItem('a', cfg.radio_address);
 	    break;
 	}
     }
@@ -257,11 +273,12 @@ sensorScanTask(Task *me)
     reference = test + cfg.reference;
   }
   msg.payload.sensor.value_2 = reference * 10;
+#if DEBUG
   Serial.print(test);
   Serial.write(':');
   Serial.println(reference);
-
   sendTime();
+#endif
   now = (hour() + TZ_OFFSET)%24 * 100 + minute();
 #if HAS_TIMED_RELAY
   if (cfg.low_time < now && now < cfg.high_time) {
@@ -285,7 +302,18 @@ sensorScanTask(Task *me)
     digitalWrite(INDICATOR, cfg.mode ? HIGH : LOW);
     msg.payload.sensor.value_4 = cfg.mode ? 1 : 0;
   }
+
+#if DEBUG
   sendMessage('s', &msg);
+#else
+  if (msg.payload.sensor.value != last_status.value
+    || msg.payload.sensor.value_2 != last_status.value_2
+    || msg.payload.sensor.value_3 != last_status.value_3
+    || msg.payload.sensor.value_4 != last_status.value_4) {
+      sendMessage('s', &msg);
+  }
+#endif
+  memcpy(&last_status, &(msg.payload.sensor), sizeof(sensor_msg_t));
 }
 
 #if DEBUG
@@ -391,6 +419,14 @@ void setup(void)
 #endif
     requestConfig();
   }
+  /* Initialise the last status message */
+  last_status.type = 1;
+  last_status.value = 0;
+  last_status.value_2 = 0;
+  last_status.value_3 = 0;
+  last_status.value_4 = 0;
+  last_status.adjust = 0;
+
   SoftTimer.add(&networkScan);
   SoftTimer.add(&sensorScan);
 #if HAS_LED_DISPLAY
