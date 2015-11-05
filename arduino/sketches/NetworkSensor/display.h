@@ -6,6 +6,7 @@
 #include <DelayRun.h>
 #include <AT24C32.h>
 #include "setup.h"
+#include <avr/pgmspace.h>
 
 enum _set_mode {
   run_mode = 0,
@@ -27,7 +28,7 @@ enum _set_mode {
 extern _set_mode current_top_level;
 extern _set_mode set_mode;
 
-const char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  DiffaddrT HrT -NL HrL -NH HrH -n5et ";
+const PROGMEM char msgs[] = "    ----5trtErr HeatCoolRUN 5trtHC  TC  DiffaddrT HrT -NL HrL -NH HrH -n5et ";
 
 
 #define DISPLAY_MSG_CLEAR 0
@@ -58,6 +59,14 @@ void displayString(const char * str) {
   }
 }
 
+void displayString_P(const char * PROGMEM str) {
+  char c;
+  for (int i = 0; i < 4; i++) {
+    c = pgm_read_byte(str+i);
+    ld.setChar(0, 3-i, c & 0x7f, c & 0x80);
+  }
+}
+
 void displayNumber(const char * format, int number) {
   char str[5];
   sprintf(str, format, number % 10000);
@@ -71,8 +80,8 @@ void displayNumber(const char * format, int number) {
   displayString(str);
 }
 
-#define displayMessage(n) displayString(msgs + n*4)
-#define showMode() displayString(msgs + (DISPLAY_CONF_BASE + current_top_level) * 4)
+#define displayMessage(n) displayString_P(msgs + n*4)
+#define showMode() displayString_P(msgs + (DISPLAY_CONF_BASE + current_top_level) * 4)
 
 void displayTemp(float tempC) {
   int temp;
@@ -92,7 +101,7 @@ void showOptions() {
   char str[5];
   switch (set_mode) {
     case hc_mode:
-      displayString(msgs + (DISPLAY_MODE_BASE + (cfg.mode ? 1 : 0)) * 4);
+      displayString_P(msgs + (DISPLAY_MODE_BASE + (cfg.mode ? 1 : 0)) * 4);
       break;
     case temp_mode:
       displayNumber("  %2d", cfg.low_point);

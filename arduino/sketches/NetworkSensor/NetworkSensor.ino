@@ -56,7 +56,6 @@ RF24Network network(radio);
 #endif
 
 bool haveMessage = false;
-uint32_t my_counter = 0;
 sensor_msg_t last_status;
 
 /*
@@ -344,7 +343,7 @@ readConfig(void)
   int read = eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
 #else
 #if DEBUG
-  Serial.println("No EEPROM - returning random data");
+  Serial.println(F("No EEPROM - returning random data"));
 #endif
 #endif
 }

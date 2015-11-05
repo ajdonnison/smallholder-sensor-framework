@@ -105,6 +105,13 @@
  */
 #define CONFIGURED     0xeb
 
+/*
+ * To reduce code/memory usage you can disable the alarm
+ * code in the DallasTemperatureSensor library by setting
+ * REQUIRESALARMS to false
+ */
+#define REQUIRESALARMS	false
+
 // some forward definitions to assist in include ordering
 void readConfig(void);
 void writeConfig(void);
