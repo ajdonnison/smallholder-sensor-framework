@@ -25,9 +25,17 @@
 #define ON_TIME 30
 #define INDICATOR 13
 
+#define dprintln(x) if (DEBUG) Serial.println(x)
+#define dprint(x) if (DEBUG) Serial.print(x)
+
 OneWire dataBus(ONE_WIRE_IF);
 DallasTemperature devManager(&dataBus);
 boolean startup_delay = true;
+
+// Flags
+unsigned char DEBUG = 0;
+unsigned char TESTMODE = 0;
+byte currentMenu = 0;
 
 typedef struct st_devlist {
   DeviceAddress * sensor;
@@ -38,7 +46,7 @@ typedef struct st_devlist {
 } DEVICE_LIST;
 
 
-DEVICE_LIST nodes[DEVICE_COUNT];
+DEVICE_LIST nodes[MAX_DEVICE_COUNT];
 
 DeviceAddress  sensor_list[] = {
   { 0x28, 0x22, 0x5d, 0x97, 0x04, 0x00, 0x00, 0x46 },
@@ -49,9 +57,9 @@ DeviceAddress  sensor_list[] = {
 boolean stopPump(Task *me) {
   for (int i = 0; i < DEVICE_COUNT; i++) {
     if (nodes[i].status == 1) {
-      Serial.print("Pump ");
-      Serial.print(nodes[i].pump);
-      Serial.println(" Off");
+      dprint(F("Pump "));
+      dprint(nodes[i].pump);
+      dprintln(" Off");
       digitalWrite(nodes[i].pump, LOW);
       nodes[i].status = 2;
       nodes[i].time = MIN_WAIT;
@@ -65,16 +73,16 @@ DelayRun stopPumpTask(ON_TIME * 1000, stopPump);
 void checkTemp(Task *me) {
   boolean show_indicator = false;
   devManager.requestTemperatures();
-  if (startup_delay) {
+  if (startup_delay || TESTMODE) {
     return;
   }
   
   for (int i = 0; i < DEVICE_COUNT; i++) {
     nodes[i].temp = devManager.getTempC(*(nodes[i].sensor));
-    Serial.print("Temp ");
-    Serial.print(nodes[i].pump);
-    Serial.print(": ");
-    Serial.println(nodes[i].temp);
+    dprint(F("Temp "));
+    dprint(nodes[i].pump);
+    dprint(": ");
+    dprintln(nodes[i].temp);
     switch (nodes[i].status) {
       case 2:
         if (nodes[i].time-- < 0) {
@@ -83,8 +91,8 @@ void checkTemp(Task *me) {
         break;
       case 0:
         if (nodes[i].temp > MAX_TEMP) {
-          Serial.print("Turning on pump ");
-          Serial.println(nodes[i].pump);
+          dprint(F("Turning on pump "));
+          dprintln(nodes[i].pump);
           nodes[i].status = 1;
           digitalWrite(nodes[i].pump, HIGH);
           stopPumpTask.startDelayed();
@@ -107,9 +115,115 @@ boolean clearDelay(Task *me) {
   return true;
 }
 
-Task checkTempTask(1000, checkTemp);
-DelayRun clearDelayTask(6000, clearDelay);
+void showStatus() {
+  if (TESTMODE) {
+    devManager.requestTemperatures();
+  }
+  for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
+    if (TESTMODE && i < DEVICE_COUNT) {
+      nodes[i].temp = devManager.getTempC(*(nodes[i].sensor));
+    }
+    Serial.print(F("Pump "));
+    Serial.print(i);
+    Serial.print(F(" Pin:"));
+    Serial.print(nodes[i].pump);
+    Serial.print(F(" Temp:"));
+    Serial.print(nodes[i].temp);
+    Serial.print(F(" Status:"));
+    switch (nodes[i].status) {
+      case 0:
+        Serial.println(F("STOPPED"));
+	break;
+      case 1:
+        Serial.println(F("RUNNING"));
+	break;
+      case 2:
+        Serial.print(F("WAITING "));
+	Serial.println(nodes[i].time);
+	break;
+    }
+  }
+}
 
+void handleCommand(int cmd) {
+  switch (currentMenu) {
+    case 0:
+      switch (cmd) {
+        case 'd':
+	  Serial.print(F("Turning DEBUG "));
+	  if (DEBUG) {
+	    DEBUG = 0;
+	    Serial.println(F("off"));
+	  }
+	  else {
+	    DEBUG = 1;
+	    Serial.println(F("on"));
+	  }
+	  break;
+	case 't':
+	  currentMenu = cmd;
+	  TESTMODE = 1;
+	  Serial.println(F("Test mode"));
+	  break;
+	case 's':
+	  showStatus();
+	  break;
+	default:
+	  Serial.println(F("Menu options:"));
+	  Serial.println(F("d - Toggle DEBUG"));
+	  Serial.println(F("t - Test mode"));
+	  Serial.println(F("s - Show Status"));
+	  break;
+      }
+      break;
+    case 't':
+      switch (cmd) {
+	case 's':
+	  showStatus();
+	  break;
+	case 'x':
+	  TESTMODE = 0;
+	  currentMenu = 0;
+	  Serial.println(F("Run mode"));
+	  break;
+	default:
+	  if (cmd >= '0' && cmd < ('0' + DEVICE_COUNT)) {
+	    int i = cmd - '0';
+	    if (nodes[i].status == 1) {
+	      Serial.println(F("Turning off pump "));
+	      Serial.print(i);
+	      nodes[i].status = 0;
+	      digitalWrite(nodes[i].pump, LOW);
+	    } else {
+	      Serial.println(F("Turning on pump "));
+	      Serial.print(i);
+	      nodes[i].status = 1;
+	      digitalWrite(nodes[i].pump, HIGH);
+	    }
+	  }
+	  else {
+	    Serial.println(F("Test options:"));
+	    Serial.println(F("0-9 - toggle pump status"));
+	    Serial.println(F("s - Show Status"));
+	    Serial.println(F("x - Exit test mode"));
+	  }
+	  break;
+      }
+      break;
+  }
+}
+
+// Handle keyboard input
+void kint(Task *me) {
+  int cmd;
+  if (Serial.available()) {
+    handleCommand(Serial.read());
+  }
+}
+
+Task checkTempTask(1000, checkTemp);
+Task menuHandler(100, kint);
+DelayRun clearDelayTask(6000, clearDelay);
 
 void setup() {
   // Set up the nodes array
@@ -123,18 +237,10 @@ void setup() {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, LOW);
   }
-/*  for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
-    int pin = PUMP_OFFSET + i;
-    Serial.print("Checking ");
-    Serial.println(pin);
-    digitalWrite(pin, HIGH);
-    delay(5000);
-    digitalWrite(pin, LOW);
-    Serial.println("done");
-  }
-*/
-  for (int i = 0; i < DEVICE_COUNT; i++) {
-    nodes[i].sensor = sensor_list+i;
+  for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
+    if (i < DEVICE_COUNT) {
+      nodes[i].sensor = sensor_list+i;
+    }
     nodes[i].pump = PUMP_OFFSET + i;
     nodes[i].temp = 0.0;
     nodes[i].status = 0;
@@ -142,6 +248,7 @@ void setup() {
   }
   devManager.begin();
   SoftTimer.add(&checkTempTask);
+  SoftTimer.add(&menuHandler);
   clearDelayTask.startDelayed();
 }
 
