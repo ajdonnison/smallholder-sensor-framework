@@ -15,6 +15,13 @@
  */
 #define CHANNEL		90
 /*
+ * HAS_RADIO determines if we have a radio.
+ * By disabling this we lose network connectivity
+ * but we do reduce the amount of code being
+ * generated
+ */
+#define HAS_RADIO       0
+/*
  * RADIO_ADDRESS is structured as an octal
  * number indicating the place in the network.
  * 00 is the base station
@@ -23,7 +30,7 @@
  * 0125 to 0525 relay through 025, which relays through 05
  * The maximal address is 05555
  */
-#define RADIO_ADDRESS	01
+#define RADIO_ADDRESS	053
 /*
  * By default radios are in relay mode, allowing leaf
  * nodes to be added. If this is to be a terminal leaf
@@ -48,7 +55,7 @@
  * (and acting upon) sensor input.  Again this is
  * offset by the RADIO_ADDRESS.
  */
-#define SENSOR_LOOP_MS	1995
+#define SENSOR_LOOP_MS	399
 
 /*
  * Times are set at UTC, so the TZ_OFFSET is the
@@ -115,3 +122,4 @@
 // some forward definitions to assist in include ordering
 void readConfig(void);
 void writeConfig(void);
+void configureTemp(void);

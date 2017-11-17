@@ -85,9 +85,10 @@ void displayNumber(const char * format, int number) {
 
 void displayTemp(float tempC) {
   int temp;
-  char str[4];
+  char str[5];
 
   temp = tempC * 100;
+  str[4] = 0;
   str[3] = 'C';
   str[2] = ((temp + 5) /10)%10;
   str[1] = ((temp / 100)%10) | 0x80;
@@ -113,7 +114,7 @@ void showOptions() {
       displayNumber("%04o", cfg.radio_address & 0xfff);
       break;
     case time_hour_mode:
-      displayNumber("  %02d", hour());
+      displayNumber("  %02d", (hour() + TZ_OFFSET) % 24);
       break;
     case time_minute_mode:
       displayNumber("  %02d", minute());
@@ -283,10 +284,16 @@ void setMode(int inc) {
 }
 
 void upOn() {
+#if DEBUG
+  Serial.println(F("Up pressed"));
+#endif
   startModeChange.startDelayed();
 }
 
 void upOff(long unsigned int tm) {
+#if DEBUG
+  Serial.println(F("Up released"));
+#endif
   SoftTimer.remove(&startModeChange);
   if (tm < SETUP_TIMER) {
     setMode(1);
@@ -294,10 +301,16 @@ void upOff(long unsigned int tm) {
 }
 
 void dnOn() {
+#if DEBUG
+  Serial.println(F("Down pressed"));
+#endif
   startModeChange.startDelayed();
 }
 
 void dnOff(long unsigned int tm) {
+#if DEBUG
+  Serial.println(F("Down released"));
+#endif
   SoftTimer.remove(&startModeChange);
   if (tm < SETUP_TIMER) {
     setMode(-1);
@@ -321,7 +334,6 @@ void display_init() {
   readConfig();
   if (cfg.sentinel != CONFIGURED) {
     displayMessage(DISPLAY_MSG_WRITE);
-    configureTemp();
     cfg.sentinel = 1;
     cfg.low_point = 30;
     cfg.high_point = 30;
@@ -329,6 +341,7 @@ void display_init() {
     cfg.high_time = 1900;
     cfg.mode = false;
     cfg.reference = 0;
+    configureTemp();
     writeConfig();
   }
   ld.shutdown(0, false);
