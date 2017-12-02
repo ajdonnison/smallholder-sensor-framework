@@ -56,6 +56,7 @@ typedef struct _devs_t {
 struct _cfg {
   int devcount;
   devs_t sensors[MAX_DEVICE_COUNT];
+  float max_temp;
 } cfg;
 
 
@@ -127,7 +128,7 @@ void checkTemp(Task *me) {
         }
         break;
       case 0:
-        if (nodes[i].temp > MAX_TEMP) {
+        if (nodes[i].temp > cfg.max_temp) {
           dprint(F("Turning on pump "));
           dprintln(cfg.sensors[i].pump + 1 - PUMP_OFFSET);
           nodes[i].status = 1;
@@ -156,7 +157,7 @@ void showSensor(void) {
   devManager.requestTemperatures();
   devs_t device = cfg.sensors[currentSensor];
   float temp = devManager.getTempC(device.sensor);
-  Serial.print(currentSensor);
+  Serial.print(currentSensor + 1);
   Serial.print(F(" ADDR:"));
   for (int i = 0; i < sizeof(DeviceAddress); i++) {
     Serial.print(device.sensor[i], HEX);
@@ -171,6 +172,8 @@ void showStatus() {
   if (TESTMODE || ASSOC_MODE) {
     devManager.requestTemperatures();
   }
+  Serial.print(F("Max Temp: "));
+  Serial.println(cfg.max_temp);
   for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
     if ((TESTMODE || ASSOC_MODE) && i < cfg.devcount) {
       nodes[i].temp = devManager.getTempC(cfg.sensors[i].sensor);
@@ -202,6 +205,8 @@ void showStatus() {
 }
 
 void handleCommand(int cmd) {
+  float newmax = 0;
+
   switch (currentMenu) {
     case 0:
       switch (cmd) {
@@ -224,6 +229,15 @@ void handleCommand(int cmd) {
 	case 's':
 	  showStatus();
 	  break;
+        case 'm':
+          Serial.println(F("Set Max temp:"));
+          if ((newmax = Serial.parseFloat()) > 0) {
+            Serial.print(F("Setting max temp to "));
+            Serial.println(newmax);
+            cfg.max_temp = newmax;
+            writeConfig();
+          }
+          break;
         case 'a':
           currentMenu = cmd;
           ASSOC_MODE = 1;
@@ -255,7 +269,7 @@ void handleCommand(int cmd) {
 	  showSensor();
           break;
         case 'n':
-	  if (++currentSensor > cfg.devcount) currentSensor=cfg.devcount;
+	  if (++currentSensor >= cfg.devcount) currentSensor=cfg.devcount-1;
 	  showSensor();
           break;
         case 'p':
@@ -342,6 +356,7 @@ DelayRun clearDelayTask(6000, clearDelay);
 void setup() {
   Serial.begin(9600);
   Serial.println("Starting");
+  Serial.setTimeout(5000);
   
   startup_delay = true;
   heartbeat.start();
@@ -357,8 +372,13 @@ void setup() {
   SoftTimer.add(&menuHandler);
   // Now see if we need to drop into config mode
   if (cfg.devcount <= 0 || cfg.devcount > MAX_DEVICE_COUNT) {
+    cfg.max_temp = MAX_TEMP;
     currentMenu = 'a';
     ASSOC_MODE = 1;
+    findSensors();
+    showStatus();
+    currentSensor = 0;
+    showSensor();
   }
   clearDelayTask.startDelayed();
 }
