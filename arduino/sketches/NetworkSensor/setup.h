@@ -9,6 +9,10 @@
 #define SETUP_TIMER    2000
 
 /*
+ * Do we have a radio to configure.
+ */
+#define HAS_RADIO       1
+/*
  * CHANNEL is the radio channel to use - all
  * radios in the same network require the same
  * channel.
@@ -69,9 +73,8 @@
 /*
  * If using the TinyRTC board, which has an EEPROM
  * on board, you can define this to allow persistance
- * of configuration items.  There should be a fallback
- * of using the Arduino inbuilt EEPROM, however that has
- * not yet been implemented.
+ * of configuration items.  If disabled it uses the inbuilt
+ * Arduino EEPROM.
  */
 #define HAS_EEPROM 1
 /*
@@ -115,3 +118,4 @@
 // some forward definitions to assist in include ordering
 void readConfig(void);
 void writeConfig(void);
+void configureTemp(void);

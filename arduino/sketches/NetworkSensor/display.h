@@ -4,7 +4,6 @@
 #include <LedControl.h>
 #include <Debouncer.h>
 #include <DelayRun.h>
-#include <AT24C32.h>
 #include "setup.h"
 #include <avr/pgmspace.h>
 

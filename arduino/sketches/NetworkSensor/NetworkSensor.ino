@@ -14,16 +14,18 @@
 #include <Wire.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
-#include <RF24.h>
-#include <RF24Network.h>
-#include <SPI.h>
+#if HAS_RADIO
+ #include <RF24.h>
+ #include <RF24Network.h>
+ #include <SPI.h>
+ #include "message.h"
+#endif
 #include <Time.h>
 #if HAS_RTC
  #include <DS1307RTC.h>
 #endif
 #include <PciManager.h>
 #include <SoftTimer.h>
-#include "message.h"
 
 struct _cfg {
   uint8_t sentinel;
@@ -48,15 +50,18 @@ struct _cfg {
  #define displayTemp(s)
 #endif
 
-RF24 radio(RADIO_CE,RADIO_CS);
-RF24Network network(radio);
+#if HAS_RADIO
+ RF24 radio(RADIO_CE,RADIO_CS);
+ RF24Network network(radio);
+ sensor_msg_t last_status;
+#endif
 #if HAS_EEPROM
  #include <AT24C32.h>
  AT24C32 eeprom(0);
+#else
+ #include <EEPROM.h>
 #endif
 
-bool haveMessage = false;
-sensor_msg_t last_status;
 
 /*
  * Need to find out how many sensors we have on the 1-wire
@@ -68,8 +73,7 @@ sensor_msg_t last_status;
 OneWire oneWire(ONE_WIRE_IF);
 DallasTemperature tempSensors(&oneWire);
 
-void
-configureTemp(void)
+void configureTemp(void)
 {
   float temp;
   int sensor_count;
@@ -87,8 +91,8 @@ configureTemp(void)
   }
 }
 
-void
-sendMessage(int type, message_t * msg)
+#if HAS_RADIO
+void sendMessage(int type, message_t * msg)
 {
   RF24NetworkHeader hdr(0, type);
   if (network.write(hdr, (void *)msg, sizeof(message_t))) {
@@ -103,9 +107,10 @@ sendMessage(int type, message_t * msg)
   // And now we request a network update
   networkScanTask((Task *)NULL);
 }
+#endif
 
-void
-sendTime(void)
+#if HAS_RADIO
+void sendTime(void)
 {
   message_t tm;
 
@@ -118,10 +123,10 @@ sendTime(void)
 
   sendMessage('t', &tm);
 }
+#endif
 
 #if DEBUG
-void
-printTime()
+void printTime()
 {
   Serial.print(hour());
   Serial.print(":");
@@ -139,24 +144,26 @@ printTime()
 #define printTime()
 #endif
 
-void
-requestConfig(void) {
+#if HAS_RADIO
+void requestConfig(void) {
   message_t cmsg;
 
   cmsg.payload.config.item = 'a';
   sendMessage('r', &cmsg);
 }
+#endif
 
-void
-sendConfigItem(uint32_t item, uint32_t value) {
+#if HAS_RADIO
+void sendConfigItem(uint32_t item, uint32_t value) {
   message_t cmsg;
   cmsg.payload.config.item = item;
   cmsg.payload.config.value = value;
   sendMessage('C', &cmsg);
 }
+#endif
 
-void
-sendConfig() {
+#if HAS_RADIO
+void sendConfig() {
   // Send a series of config messages out.
   message_t cmsg;
 
@@ -167,9 +174,10 @@ sendConfig() {
   sendConfigItem('e', cfg.high_time);
   sendConfigItem('m', cfg.mode);
 }
+#endif
 
-void
-networkScanTask(Task *me)
+#if HAS_RADIO
+void networkScanTask(Task *me)
 {
   message_t msg, s_msg;
 
@@ -243,9 +251,9 @@ networkScanTask(Task *me)
     }
   }
 }
+#endif
 
-void
-sensorScanTask(Task *me)
+void sensorScanTask(Task *me)
 {
   float test;
   float reference;
@@ -257,35 +265,44 @@ sensorScanTask(Task *me)
   }
 #endif
 
-  message_t msg;
-
-  msg.payload.sensor.type = 1;
-  msg.id = 1;
-
   tempSensors.requestTemperatures();
   test = tempSensors.getTempC(cfg.temp_sensors[0]);
+
+#if HAS_RADIO
+  message_t msg;
+  msg.payload.sensor.type = 1;
+  msg.id = 1;
   msg.payload.sensor.value = test * 10;
+#endif
 
   if (MAX_TEMP_SENSORS > 1) {
     reference = tempSensors.getTempC(cfg.temp_sensors[1]);
   } else {
     reference = test + cfg.reference;
   }
+#if HAS_RADIO
   msg.payload.sensor.value_2 = reference * 10;
+#endif
 #if DEBUG
   Serial.print(test);
   Serial.write(':');
   Serial.println(reference);
+ #if HAS_RADIO
   sendTime();
+ #endif
 #endif
   now = (hour() + TZ_OFFSET)%24 * 100 + minute();
 #if HAS_TIMED_RELAY
   if (cfg.low_time < now && now < cfg.high_time) {
     digitalWrite(RELAY_2, HIGH);
+#if HAS_RADIO
     msg.payload.sensor.value_3 = 1;
+#endif
   } else {
     digitalWrite(RELAY_2, LOW);
+#if HAS_RADIO
     msg.payload.sensor.value_3 = 0;
+#endif
   }
 #endif
 
@@ -294,14 +311,19 @@ sensorScanTask(Task *me)
   if (test < cfg.low_point) {
     digitalWrite(RELAY,cfg.mode ? LOW : HIGH);
     digitalWrite(INDICATOR, cfg.mode ? LOW : HIGH);
+#if HAS_RADIO
     msg.payload.sensor.value_4 = cfg.mode ? 0 : 1;
+#endif
   }
   else if (test >= cfg.high_point && test >= reference && (test - reference) >= cfg.reference) {
     digitalWrite(RELAY, cfg.mode ? HIGH : LOW);
     digitalWrite(INDICATOR, cfg.mode ? HIGH : LOW);
+#if HAS_RADIO
     msg.payload.sensor.value_4 = cfg.mode ? 1 : 0;
+#endif
   }
 
+#if HAS_RADIO
 #if DEBUG
   sendMessage('s', &msg);
 #else
@@ -313,11 +335,11 @@ sensorScanTask(Task *me)
   }
 #endif
   memcpy(&last_status, &(msg.payload.sensor), sizeof(sensor_msg_t));
+#endif
 }
 
 #if DEBUG
-void
-printConfig(void)
+void printConfig(void)
 {
   Serial.print("ADDR:");
   Serial.println(cfg.radio_address);
@@ -336,31 +358,32 @@ printConfig(void)
 #define printConfig()
 #endif
 
-void
-readConfig(void)
+void readConfig(void)
 {
 #if HAS_EEPROM
   int read = eeprom.readBytes(0, (void *)&cfg, sizeof(cfg));
 #else
-#if DEBUG
-  Serial.println(F("No EEPROM - returning random data"));
-#endif
+  EEPROM.get(0, cfg);
 #endif
 }
 
-void
-writeConfig(void)
+void writeConfig(void)
 {
-#if HAS_EEPROM
   if (cfg.sentinel) {
     cfg.sentinel = CONFIGURED;
+#if HAS_EEPROM
     eeprom.writeBytes(0, (void *)&cfg, sizeof(cfg));
+#else
+  EEPROM.put(0, cfg);
+#endif
     cfg.sentinel = 0;
   }
-#endif
 }
 
+#if HAS_RADIO
 Task networkScan(RADIO_ADDRESS + NETWORK_LOOP_MS, networkScanTask);
+#endif 
+
 Task sensorScan(RADIO_ADDRESS + SENSOR_LOOP_MS, sensorScanTask);
 
 void setup(void)
@@ -396,8 +419,6 @@ void setup(void)
   }
 #endif
 
-  SPI.begin();
-
   // check our configuration
   tempSensors.begin();
   readConfig();
@@ -410,6 +431,9 @@ void setup(void)
     cfg.radio_address = RADIO_ADDRESS; // Sanity Check.
   }
   printConfig();
+
+#if HAS_RADIO
+  SPI.begin();
   radio.begin();
   network.begin(CHANNEL, cfg.radio_address);
   if (cfg.sentinel != CONFIGURED) {
@@ -427,6 +451,8 @@ void setup(void)
   last_status.adjust = 0;
 
   SoftTimer.add(&networkScan);
+#endif
+
   SoftTimer.add(&sensorScan);
 #if HAS_LED_DISPLAY
   set_mode = run_mode;
