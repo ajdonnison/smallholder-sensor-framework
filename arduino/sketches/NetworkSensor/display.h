@@ -112,7 +112,7 @@ void showOptions() {
       displayNumber("%04o", cfg.radio_address & 0xfff);
       break;
     case time_hour_mode:
-      displayNumber("  %02d", hour());
+      displayNumber("  %02d", (hour() + TZ_OFFSET)%24);
       break;
     case time_minute_mode:
       displayNumber("  %02d", minute());

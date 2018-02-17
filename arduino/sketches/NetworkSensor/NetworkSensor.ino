@@ -365,6 +365,8 @@ void readConfig(void)
 #else
   EEPROM.get(0, cfg);
 #endif
+  // Always check the config for the temp sensors
+  configureTemp();
 }
 
 void writeConfig(void)
@@ -425,7 +427,6 @@ void setup(void)
   if (cfg.sentinel != CONFIGURED) {
     cfg.radio_address = RADIO_ADDRESS;
     cfg.relay = RADIO_RELAY;
-    configureTemp();
   }
   if (cfg.radio_address > 05555) {
     cfg.radio_address = RADIO_ADDRESS; // Sanity Check.

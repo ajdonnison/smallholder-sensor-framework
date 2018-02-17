@@ -11,7 +11,7 @@
 /*
  * Do we have a radio to configure.
  */
-#define HAS_RADIO       1
+#define HAS_RADIO       0
 /*
  * CHANNEL is the radio channel to use - all
  * radios in the same network require the same
@@ -52,7 +52,7 @@
  * (and acting upon) sensor input.  Again this is
  * offset by the RADIO_ADDRESS.
  */
-#define SENSOR_LOOP_MS	1995
+#define SENSOR_LOOP_MS	395
 
 /*
  * Times are set at UTC, so the TZ_OFFSET is the
@@ -106,7 +106,7 @@
  * MAX_TEMP_SENSORS value) then this should be changed so
  * that the EEPROM contents are invalidated.
  */
-#define CONFIGURED     0xeb
+#define CONFIGURED     0xe5
 
 /*
  * To reduce code/memory usage you can disable the alarm
