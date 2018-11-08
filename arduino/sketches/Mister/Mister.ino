@@ -309,7 +309,7 @@ void handleCommand(int cmd) {
 	    int i = cmd - '1';
             int j = -1;
             for (int x = 0; x < MAX_DEVICE_COUNT; x++) {
-              if (i == (cfg.sensors[x].pump + 1 - PUMP_OFFSET))
+              if (i == (cfg.sensors[x].pump - PUMP_OFFSET))
                 j = i;
                 break;
             }
@@ -325,7 +325,7 @@ void handleCommand(int cmd) {
 	    } else {
 	      Serial.println(F("Turning on pump "));
 	      Serial.print(cfg.sensors[j].pump + 1 - PUMP_OFFSET);
-	      nodes[i].status = 1;
+	      nodes[j].status = 1;
 	      digitalWrite(cfg.sensors[j].pump, HIGH);
 	    }
 	  }
