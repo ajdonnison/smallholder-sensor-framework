@@ -57,6 +57,8 @@ struct _cfg {
   int devcount;
   devs_t sensors[MAX_DEVICE_COUNT];
   float max_temp;
+  float run_time;
+  float min_delay;
 } cfg;
 
 
@@ -69,6 +71,16 @@ void readConfig(void) {
     nodes[i].status = 0;
     nodes[i].time = 0;
     nodes[i].temp = 0;
+  }
+  // Check for insane values and fix
+  if (cfg.max_temp <= 0 || cfg.max_temp > 50) {
+    cfg.max_temp = MAX_TEMP;
+  }
+  if (cfg.min_wait <= 0 || cfg.min_wait > 9999) {
+    cfg.min_wait = MIN_WAIT;
+  }
+  if (cfg.run_time <= 0 || cfg.run_time > 9999) {
+    cfg.run_time = ON_TIME;
   }
 }
 
@@ -174,6 +186,10 @@ void showStatus() {
   }
   Serial.print(F("Max Temp: "));
   Serial.println(cfg.max_temp);
+  Serial.print(F("Min Wait: "));
+  Serial.println(cfg.min_wait);
+  Serial.print(F("Run Time: "));
+  Serial.println(cfg.run_time);
   for (int i = 0; i < MAX_DEVICE_COUNT; i++) {
     if ((TESTMODE || ASSOC_MODE) && i < cfg.devcount) {
       nodes[i].temp = devManager.getTempC(cfg.sensors[i].sensor);
@@ -205,7 +221,7 @@ void showStatus() {
 }
 
 void handleCommand(int cmd) {
-  float newmax = 0;
+  float newval = 0;
 
   switch (currentMenu) {
     case 0:
@@ -231,10 +247,28 @@ void handleCommand(int cmd) {
 	  break;
         case 'm':
           Serial.println(F("Set Max temp:"));
-          if ((newmax = Serial.parseFloat()) > 0) {
+          if ((newval = Serial.parseFloat()) > 0) {
             Serial.print(F("Setting max temp to "));
-            Serial.println(newmax);
-            cfg.max_temp = newmax;
+            Serial.println(newval);
+            cfg.max_temp = newval;
+            writeConfig();
+          }
+          break;
+        case 'w':
+          Serial.println(F("Set Wait time:"));
+          if ((newval = Serial.parseFloat()) > 0) {
+            Serial.print(F("Setting wait time to "));
+            Serial.println(newval);
+            cfg.min_wait = newval;
+            writeConfig();
+          }
+          break;
+        case 'r':
+          Serial.println(F("Set Run time:"));
+          if ((newval = Serial.parseFloat()) > 0) {
+            Serial.print(F("Setting run time to "));
+            Serial.println(newval);
+            cfg.run_time = newval;
             writeConfig();
           }
           break;
@@ -247,6 +281,10 @@ void handleCommand(int cmd) {
 	  Serial.println(F("Menu options:"));
 	  Serial.println(F("d - Toggle DEBUG"));
 	  Serial.println(F("t - Test mode"));
+          Serial.println(F("a - Association mode"));
+          Serial.println(F("m - Set Max temp"));
+          Serial.println(F("w - Set Min wait"));
+          Serial.println(F("r - Set Run time"));
 	  Serial.println(F("s - Show Status"));
 	  break;
       }
@@ -373,6 +411,8 @@ void setup() {
   // Now see if we need to drop into config mode
   if (cfg.devcount <= 0 || cfg.devcount > MAX_DEVICE_COUNT) {
     cfg.max_temp = MAX_TEMP;
+    cfg.min_wait = MIN_WAIT;
+    cfg.run_time = ON_TIME;
     currentMenu = 'a';
     ASSOC_MODE = 1;
     findSensors();
