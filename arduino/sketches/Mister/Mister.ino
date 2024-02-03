@@ -58,7 +58,7 @@ struct _cfg {
   devs_t sensors[MAX_DEVICE_COUNT];
   float max_temp;
   float run_time;
-  float min_delay;
+  float min_wait;
 } cfg;
 
 
