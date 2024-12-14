@@ -21,6 +21,7 @@
 #define PUMP_OFFSET 3
 #define MAX_DEVICE_COUNT 4
 #define MAX_TEMP 36.0
+#define MIN_TEMP 34.0
 #define MIN_WAIT 240
 #define ON_TIME 30
 #define INDICATOR 13
@@ -59,6 +60,7 @@ struct _cfg {
   float max_temp;
   float run_time;
   float min_wait;
+  float min_temp;
 } cfg;
 
 
@@ -75,6 +77,9 @@ void readConfig(void) {
   // Check for insane values and fix
   if (cfg.max_temp <= 0 || cfg.max_temp > 50) {
     cfg.max_temp = MAX_TEMP;
+  }
+  if (cfg.min_temp <= 0 || cfg.min_temp > cfg.max_temp) {
+    cfg.min_temp = MIN_TEMP > cfg.max_temp ? (cfg.max_temp - 2.0) : MIN_TEMP;
   }
   if (cfg.min_wait <= 0 || cfg.min_wait > 9999) {
     cfg.min_wait = MIN_WAIT;
@@ -112,7 +117,7 @@ boolean stopPump(Task *me) {
       dprintln(" Off");
       digitalWrite(cfg.sensors[i].pump, LOW);
       nodes[i].status = 2;
-      nodes[i].time = MIN_WAIT;
+      nodes[i].time = cfg.min_wait;
     }
   }
   return false;
@@ -146,6 +151,15 @@ void checkTemp(Task *me) {
           nodes[i].status = 1;
           digitalWrite(cfg.sensors[i].pump, HIGH);
           stopPumpTask.startDelayed();
+        }
+        break;
+      case 1:
+        if (nodes[i].temp < cfg.min_temp) {
+          dprint(F("Turning off pump "));
+          dprintln(cfg.sensors[i].pump + 1 - PUMP_OFFSET);
+          nodes[i].status = 2;
+          digitalWrite(cfg.sensors[i].pump, LOW);
+          nodes[i].time = cfg.min_wait;
         }
         break;
     }
@@ -254,6 +268,15 @@ void handleCommand(int cmd) {
             writeConfig();
           }
           break;
+        case 'n':
+          Serial.println(F("Set Min temp:"));
+          if ((newval = Serial.parseFloat()) > 0) {
+            Serial.print(F("Setting min temp to "));
+            Serial.println(newval);
+            cfg.min_temp = newval;
+            writeConfig();
+          }
+          break;
         case 'w':
           Serial.println(F("Set Wait time:"));
           if ((newval = Serial.parseFloat()) > 0) {
@@ -269,6 +292,7 @@ void handleCommand(int cmd) {
             Serial.print(F("Setting run time to "));
             Serial.println(newval);
             cfg.run_time = newval;
+            stopPumpTask.delayMs = cfg.run_time * 1000;
             writeConfig();
           }
           break;
@@ -283,6 +307,7 @@ void handleCommand(int cmd) {
 	  Serial.println(F("t - Test mode"));
           Serial.println(F("a - Association mode"));
           Serial.println(F("m - Set Max temp"));
+          Serial.println(F("n - Set Min temp"));
           Serial.println(F("w - Set Min wait"));
           Serial.println(F("r - Set Run time"));
 	  Serial.println(F("s - Show Status"));
@@ -327,6 +352,7 @@ void handleCommand(int cmd) {
             Serial.println(F("s - Scan devices"));
             Serial.println(F("n - Next device"));
             Serial.println(F("p - Previous device"));
+            Serial.println(F("1-4 - Associate device"));
             Serial.println(F("x - Exit"));
           }
           break;
@@ -411,6 +437,7 @@ void setup() {
   // Now see if we need to drop into config mode
   if (cfg.devcount <= 0 || cfg.devcount > MAX_DEVICE_COUNT) {
     cfg.max_temp = MAX_TEMP;
+    cfg.min_temp = MIN_TEMP;
     cfg.min_wait = MIN_WAIT;
     cfg.run_time = ON_TIME;
     currentMenu = 'a';
@@ -420,6 +447,7 @@ void setup() {
     currentSensor = 0;
     showSensor();
   }
+  stopPumpTask.delayMs = cfg.run_time * 1000;
   clearDelayTask.startDelayed();
 }
 
