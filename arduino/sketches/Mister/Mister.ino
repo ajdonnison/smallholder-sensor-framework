@@ -200,6 +200,8 @@ void showStatus() {
   }
   Serial.print(F("Max Temp: "));
   Serial.println(cfg.max_temp);
+  Serial.print(F("Min Temp: "));
+  Serial.println(cfg.min_temp);
   Serial.print(F("Min Wait: "));
   Serial.println(cfg.min_wait);
   Serial.print(F("Run Time: "));
