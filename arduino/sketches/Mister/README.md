@@ -10,6 +10,10 @@ In order to save water and provide for the slow response of the
 temperature sensor, the water is turned on for 30 seconds with a
 4 minute delay between each spray.  All of this is programmable.
 
+With more efficient sprays such as the newer misting systems available
+in gardening outlets, a more realistic 5 minutes of run time can be
+used.
+
 Temperature sensors are DS18B20
 
 The solenoid valves are 12VDC, although would work with standard
@@ -30,7 +34,10 @@ and control.
 * t - Turns on the TEST mode menu
 * s - Shows current status
 * a - Turns on Association mode menu
-* m - Configure maximum temperature
+* m - Configure maximum (cut-in) temperature
+* n - Configure minimum (cut-out) temperature
+* w - Configure minimum wait time between runs
+* r - Configure maximum run time
 
 ### Test Menu
 
@@ -50,7 +57,17 @@ and control.
 
 In debug mode each tick will show the current temperature of each sensor.  When a solenoid is turned on or off that event will also be shown.
 
-### Setting max temp
+### Setting Configurable Values
 
-When `m` is chosen in the main menu the system waits for up to 5 seconds for a valid float to be entered.  This is then saved as the maximum temperature.
+In the main menu if you enter one of the configure options (`m`, `n`, `w` or `r`) it will wait for up to 5 seconds for a float value to be entered, which will then be written to EEPROM.
+
+Settable values are:
+
+| option | range | default | usage |
+| ---- | ---- | ---- | ---- |
+| m | 0-50 | 36 | Degrees C at which pump will be turned on |
+| n | 0-50 | Max less 2C | Degrees C at which pump will be turned off |
+| w | 0-9999 | 240 | Seconds to wait after pump operation stops before allowing it to trigger again |
+| r | 0-9999| 30 | Seconds of pumping time before it stops for the wait period |
+
 

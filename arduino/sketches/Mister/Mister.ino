@@ -26,6 +26,10 @@
 #define ON_TIME 30
 #define INDICATOR 13
 
+#define STOPPED 0
+#define RUNNING 1
+#define PENDING 2
+
 #define dprintln(x) if (DEBUG) Serial.println(x)
 #define dprint(x) if (DEBUG) Serial.print(x)
 
@@ -70,7 +74,7 @@ void readConfig(void) {
   EEPROM.get(0, cfg);
   // Now we build our devices list
   for (int i = 0; i < MAX_DEVICE_COUNT && i < cfg.devcount; i++) {
-    nodes[i].status = 0;
+    nodes[i].status = STOPPED;
     nodes[i].time = 0;
     nodes[i].temp = 0;
   }
@@ -111,12 +115,12 @@ void findSensors(void) {
 
 boolean stopPump(Task *me) {
   for (int i = 0; i < cfg.devcount && i < MAX_DEVICE_COUNT; i++) {
-    if (nodes[i].status == 1) {
+    if (nodes[i].status == RUNNING) {
       dprint(F("Pump "));
       dprint(cfg.sensors[i].pump + 1 - PUMP_OFFSET);
       dprintln(" Off");
       digitalWrite(cfg.sensors[i].pump, LOW);
-      nodes[i].status = 2;
+      nodes[i].status = PENDING;
       nodes[i].time = cfg.min_wait;
     }
   }
@@ -139,25 +143,25 @@ void checkTemp(Task *me) {
     dprint(": ");
     dprintln(nodes[i].temp);
     switch (nodes[i].status) {
-      case 2:
+      case PENDING:
         if (nodes[i].time-- < 0) {
-          nodes[i].status = 0;
+          nodes[i].status = STOPPED;
         }
         break;
-      case 0:
+      case STOPPED:
         if (nodes[i].temp > cfg.max_temp) {
           dprint(F("Turning on pump "));
           dprintln(cfg.sensors[i].pump + 1 - PUMP_OFFSET);
-          nodes[i].status = 1;
+          nodes[i].status = RUNNING;
           digitalWrite(cfg.sensors[i].pump, HIGH);
           stopPumpTask.startDelayed();
         }
         break;
-      case 1:
+      case RUNNING:
         if (nodes[i].temp < cfg.min_temp) {
           dprint(F("Turning off pump "));
           dprintln(cfg.sensors[i].pump + 1 - PUMP_OFFSET);
-          nodes[i].status = 2;
+          nodes[i].status = PENDING;
           digitalWrite(cfg.sensors[i].pump, LOW);
           nodes[i].time = cfg.min_wait;
         }
@@ -222,13 +226,13 @@ void showStatus() {
     }
     Serial.print(F(" Status:"));
     switch (nodes[i].status) {
-      case 0:
+      case STOPPED:
         Serial.println(F("STOPPED"));
 	break;
-      case 1:
+      case RUNNING:
         Serial.println(F("RUNNING"));
 	break;
-      case 2:
+      case PENDING:
         Serial.print(F("WAITING "));
 	Serial.println(nodes[i].time);
 	break;
@@ -383,15 +387,15 @@ void handleCommand(int cmd) {
               Serial.println(F("Cannot find pump"));
               break;
             }
-	    if (nodes[j].status == 1) {
+	    if (nodes[j].status == RUNNING) {
 	      Serial.println(F("Turning off pump "));
 	      Serial.print(cfg.sensors[j].pump + 1 - PUMP_OFFSET);
-	      nodes[j].status = 0;
+	      nodes[j].status = STOPPED;
 	      digitalWrite(cfg.sensors[j].pump, LOW);
 	    } else {
 	      Serial.println(F("Turning on pump "));
 	      Serial.print(cfg.sensors[j].pump + 1 - PUMP_OFFSET);
-	      nodes[j].status = 1;
+	      nodes[j].status = RUNNING;
 	      digitalWrite(cfg.sensors[j].pump, HIGH);
 	    }
 	  }
